@@ -1,0 +1,23 @@
+# struct_name_zh: 设施
+# ida_struct: struct_device
+# struct_size: 0x38
+# start_addrs: 0728B088
+# end_addrs: 0736B088
+# array_sizes: 16384
+# last_update: 2024-06-18 00:01:59
++00  4 byte    (18 C7 79 00)   设施相关函数所在地址
++04  4 byte
++08  4 byte    设施类型ID
++0C  4 byte    所属势力(城市、港、关为初始势力)
++10  4 byte    耐久
++14  4 byte    建设完成(0=未完成,1=已完成)
++18  4 byte
++1C  2 byte
++1E  2 byte    X坐标
++20  2 byte    Y坐标
++22  2 byte
++24  4 byte
++28  4 byte
++2C  4 byte
++30  4 byte
++34  4 byte

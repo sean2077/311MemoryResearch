@@ -1,0 +1,132 @@
+
+
+
+data:008BC1BC 都市一览数组集         dd offset dword_910320  ; DATA XREF: sub_64BC60+11↑r
+.data:008BC1C0                 db    9
+.data:008BC1C1                 db    0
+.data:008BC1C2                 db    0
+.data:008BC1C3                 db    0
+.data:008BC1C4 off_8BC1C4      dd offset unk_7EC378    ; DATA XREF: .text:0073F66B↑w
+.data:008BC1C4                                         ; 戰力
+.data:008BC1C8                 dd offset unk_8BC068
+.data:008BC1CC                 db    8
+.data:008BC1CD                 db    0
+.data:008BC1CE                 db    0
+.data:008BC1CF                 db    0
+.data:008BC1D0 off_8BC1D0      dd offset unk_7E9DE8    ; DATA XREF: .text:0073F677↑w
+.data:008BC1D0                                         ; 兵裝
+.data:008BC1D4                 dd offset unk_8BC088
+.data:008BC1D8                 db    8
+.data:008BC1D9                 db    0
+.data:008BC1DA                 db    0
+.data:008BC1DB                 db    0
+.data:008BC1DC off_8BC1DC      dd offset unk_7E9E90    ; DATA XREF: .text:0073F683↑w
+.data:008BC1DC                                         ; 資金
+.data:008BC1E0                 dd offset unk_8BC0A8
+.data:008BC1E4                 db    6
+.data:008BC1E5                 db    0
+.data:008BC1E6                 db    0
+.data:008BC1E7                 db    0
+.data:008BC1E8 off_8BC1E8      dd offset unk_7E9E88    ; DATA XREF: .text:0073F68D↑w
+.data:008BC1E8                                         ; 兵糧
+.data:008BC1EC                 dd offset unk_8BC0C0
+.data:008BC1F0                 db    6
+.data:008BC1F1                 db    0
+.data:008BC1F2                 db    0
+.data:008BC1F3                 db    0
+.data:008BC1F4 off_8BC1F4      dd offset unk_7ECC28    ; DATA XREF: .text:0073F699↑w
+.data:008BC1F4                                         ; 設施１
+.data:008BC1F8                 dd offset unk_8BC0D8
+.data:008BC1FC                 db    8
+.data:008BC1FD                 db    0
+.data:008BC1FE                 db    0
+.data:008BC1FF                 db    0
+.data:008BC200 off_8BC200      dd offset unk_7ECC20    ; DATA XREF: .text:0073F6A5↑w
+.data:008BC200                                         ; 設施２
+.data:008BC204                 dd offset unk_8BC0F8
+.data:008BC208                 db  0Eh
+.data:008BC209                 db    0
+.data:008BC20A                 db    0
+.data:008BC20B                 db    0
+.data:008BC20C off_8BC20C      dd offset unk_7EC370    ; DATA XREF: .text:0073F6AA↑w
+.data:008BC20C                                         ; 地理
+.data:008BC210                 dd offset unk_913A5C
+.data:008BC214                 db    7
+.data:008BC215                 db    0
+.data:008BC216                 db    0
+.data:008BC217                 db    0
+.data:008BC218 off_8BC218      dd offset unk_7EC7A4    ; DATA XREF: .text:0073F6B0↑w
+.data:008BC218                                         ; 災害
+.data:008BC21C                 dd offset unk_8BC17C
+.data:008BC220                 db    4
+.data:008BC221                 db    0
+.data:008BC222                 db    0
+.data:008BC223                 db    0
+
+
+【获取城市属性的函数跳表】
+text:004C1620 jpt_获取城市信息0至63号定义 dd offset _func_4C0F0D_城市ID; 0
+.text:004C1620                                         ; DATA XREF: func_获取城市信息_城市指针_命令编号_+2DD↑r
+.text:004C1624                 dd offset loc_4C1611    ; 1 ; jump table for switch statement
+.text:004C1628                 dd offset _func_4C0F0D_城市ID; 2
+.text:004C162C                 dd offset _func_4C0F14_所属州; 3
+.text:004C1630                 dd offset _func_4C0F24_城市太守; 4
+.text:004C1634                 dd offset _func_4C0F38_所属军团ID; 5
+.text:004C1638                 dd offset _func_4C0F4C_兵力上限; 6
+.text:004C163C                 dd offset _func_4C0F60_兵力; 7
+.text:004C1640                 dd offset _func_4C0F70_金钱; 8
+.text:004C1644                 dd offset _func_4C0F80_兵粮; 9
+.text:004C1648                 dd offset _func_4C0F90_钱粮交易价格; 0Ah
+.text:004C164C                 dd offset _func_4C0FA1_是否有商人; 0Bh
+.text:004C1650                 dd offset _func_4C0FB2_城市最大耐久; 0Ch
+.text:004C1654                 dd offset _func_4C0FC9_城市耐久; 0Dh
+.text:004C1658                 dd offset _func_4C0FE0_城市气力; 0Eh
+.text:004C165C                 dd offset _func_4C0FF4_城市治安; 0Fh
+.text:004C1660                 dd offset _func_4C1008_城市是否处于战斗不可状态; 10h
+.text:004C1664                 dd offset _func_4C101B_城市人口; 11h
+.text:004C1668                 dd offset _func_4C101B_农村人口; 12h
+.text:004C166C                 dd offset _func_4C136A_预计收钱; 13h
+.text:004C1670                 dd offset _func_4C137A_预计收粮; 14h
+.text:004C1674                 dd offset _func_4C1041_研究技巧; 15h
+.text:004C1678                 dd offset _func_4C1054_巡查状态; 16h
+.text:004C167C                 dd offset _func_4C1068_商人状态; 17h
+.text:004C1680                 dd offset _func_4C107C_训练状态; 18h
+.text:004C1684                 dd offset _func_4C1090_空兵舍数量; 19h
+.text:004C1688                 dd offset _func_4C10A4_锻造所数量; 1Ah
+.text:004C168C                 dd offset _func_4C10B8_空厩舍数量; 1Bh
+.text:004C1690                 dd offset _func_4C10CC_空工房数量; 1Ch
+.text:004C1694                 dd offset _func_4C10E0_空船厂数量; 1Dh
+.text:004C1698                 dd offset _func_4C10F4_所属势力ID; 1Eh
+.text:004C169C                 dd offset _func_4C1108_内政用地数; 1Fh
+.text:004C16A0                 dd offset _func_4C111B_可开发用地数; 20h
+.text:004C16A4                 dd offset _func_4C1136_已开发用地数; 21h
+.text:004C16A8                 dd offset _func_4C1149_邻接城市个数; 22h
+.text:004C16AC                 dd offset _func_4C1179_现役武将个数; 23h
+.text:004C16B0                 dd offset _func_4C1198_俘虏武将个数; 24h
+.text:004C16B4                 dd offset _func_4C11B7_在野武将个数; 25h
+.text:004C16B8                 dd offset _func_4C11D6_城市特色; 26h
+.text:004C16BC                 dd offset _func_4C120E_皇帝是否在当前城市; 27h
+.text:004C16C0                 dd offset _func_4C1259_城市的异族盗贼根据地ID; 28h
+.text:004C16C4                 dd offset _func_4C12A1_是否交战; 29h
+.text:004C16C8                 dd offset _func_4C12C0_敌对邻接城市个数; 2Ah
+.text:004C16CC                 dd offset loc_4C135B    ; 2Bh
+.text:004C16D0                 dd offset _func_4C136E_金钱预计支出; 2Ch
+.text:004C16D4                 dd offset _func_4C1372_预计收支后的金钱; 2Dh
+.text:004C16D8                 dd offset _func_4C1376_金钱是否足够; 2Eh
+.text:004C16DC                 dd offset _func_4C137E_兵粮预计支出; 2Fh
+.text:004C16E0                 dd offset _func_4C1382_预计收支后的兵粮; 30h
+.text:004C16E4                 dd offset _func_4C1386_兵粮是否足够; 31h
+.text:004C16E8                 dd offset _func_4C13A5_太守忠诚度; 32h
+.text:004C16EC                 dd offset _func_4C13FA_城市金钱上限; 33h
+.text:004C16F0                 dd offset _func_4C140C_城市兵粮上限; 34h
+.text:004C16F4                 dd offset _func_4C141E_城市枪数量; 35h
+.text:004C16F8                 dd offset _func_4C1434_城市戟数量; 36h
+.text:004C16FC                 dd offset _func_4C144A_城市弩数量; 37h
+.text:004C1700                 dd offset _func_4C1460_城市马数量; 38h
+.text:004C1704                 dd offset _func_4C1476_城市冲车或木兽数量; 39h
+.text:004C1708                 dd offset _func_4C14C3_城市井栏或投石数量; 3Ah
+.text:004C170C                 dd offset _func_4C1510_城市艨艟或斗舰数量; 3Bh
+.text:004C1710                 dd offset loc_4C155D    ; 3Ch
+.text:004C1714                 dd offset loc_4C1570    ; 3Dh
+.text:004C1718                 dd offset _func_4C1583_已完成的铜雀台个数; 3Eh
+.text:004C171C                 dd offset _func_4C15B0_城市铜雀台个数; 3Fh

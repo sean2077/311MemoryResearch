@@ -1,0 +1,30 @@
+# struct_name_zh: 关隘
+# ida_struct: struct_mountain_pass
+# struct_size: 0x90
+# start_addrs: 07207B00
+# end_addrs: 072080A0
+# array_sizes: 10
+# last_update: 2024-06-18 00:01:58
++00  4 byte    (70 C1 79 00)   关隘相关函数所在地址
++04  8 byte    名称
++20  4 byte    军团ID
++24  4 byte    兵力
++28  4 byte    金钱
++2C  4 byte    兵粮
++30  16byte    枪～马数量
++40  4 byte    耐久
++44  28byte    冲车～斗舰数量
++60  1 byte    气力
++61  1 byte
++62  2 byte    最大耐久
++64  4 byte    太守
++68  4 byte    已训练
++6C  4 byte
++70  4 byte    (44 BF 79 00)  某指针
++74  4 byte    ??某指针
++78  4 byte    ??某指针
++7C  4 byte    现役人数
++80  4 byte    ??某指针
++84  4 byte    ??某指针
++88  4 byte    ??都是10
++8C  4 byte    ??都是0

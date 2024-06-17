@@ -1,0 +1,15 @@
+# struct_name_zh: 官职
+# ida_struct: struct_gov_position
+# struct_size: 0x3C
+# start_addrs: 0727F334
+# end_addrs: 07280630
+# array_sizes: 81
+# last_update: 2024-06-18 00:01:58
++00  4 byte    官职相关函数所在地址(64 C8 79 00)
++2C  4 byte    带兵
++30  4 byte    属性上升类型
++34  1 byte    属性上升
++35  1 byte    俸禄
++36  1 byte    等级
++37  1 byte
++38  4 byte

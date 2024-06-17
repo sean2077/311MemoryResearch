@@ -1,0 +1,315 @@
+
+1. 武将一览
+
+【所属】
+san11pk.exe:008BD450 off_8BD450 dd offset unk_7ECB10         ; DATA XREF: sub_73FB10+11↑w
+san11pk.exe:008BD454 dd offset unk_8BCF54
+san11pk.exe:008BD458 db    9
+san11pk.exe:008BD459 db    0
+san11pk.exe:008BD45A db    0
+san11pk.exe:008BD45B db    0
+【能力】
+san11pk.exe:008BD45C off_8BD45C dd offset unk_7EC3B8         ; DATA XREF: sub_73FB10+1B↑w
+san11pk.exe:008BD460 dd offset unk_950140
+san11pk.exe:008BD464 db  0Bh
+san11pk.exe:008BD465 db    0
+san11pk.exe:008BD466 db    0
+san11pk.exe:008BD467 db    0
+【特技】
+san11pk.exe:008BD468 off_8BD468 dd offset unk_7EB39C         ; DATA XREF: sub_73FB10+27↑w
+san11pk.exe:008BD46C dd offset unk_8BCF48
+san11pk.exe:008BD470 db    3
+san11pk.exe:008BD471 db    0
+san11pk.exe:008BD472 db    0
+san11pk.exe:008BD473 db    0
+【适性】
+san11pk.exe:008BD474 off_8BD474 dd offset unk_7EB418         ; DATA XREF: sub_73FB10+33↑w
+san11pk.exe:008BD478 dd offset unk_8BCF8C
+san11pk.exe:008BD47C db    7
+san11pk.exe:008BD47D db    0
+san11pk.exe:008BD47E db    0
+san11pk.exe:008BD47F db    0
+【命令】
+san11pk.exe:008BD480 off_8BD480 dd offset unk_7EC3B0         ; DATA XREF: sub_73FB10+3D↑w
+san11pk.exe:008BD484 dd offset unk_8BCF78
+san11pk.exe:008BD488 db    5
+san11pk.exe:008BD489 db    0
+san11pk.exe:008BD48A db    0
+san11pk.exe:008BD48B db    0
+【个人】
+san11pk.exe:008BD48C off_8BD48C dd offset unk_7EC3A8         ; DATA XREF: sub_73FB10+43↑w
+san11pk.exe:008BD490 dd offset unk_8BCFA8
+san11pk.exe:008BD494 db    7
+san11pk.exe:008BD495 db    0
+san11pk.exe:008BD496 db    0
+san11pk.exe:008BD497 db    0
+san11pk.exe:008BD498 off_8BD498 dd offset asc_7ECAD4         ; DATA XREF: sub_73FB10+49↑w
+san11pk.exe:008BD498                                         ; "﹀絫"
+【血缘】
+san11pk.exe:008BD49C dd offset unk_8BCFC4
+san11pk.exe:008BD4A0 db    5
+san11pk.exe:008BD4A1 db    0
+san11pk.exe:008BD4A2 db    0
+san11pk.exe:008BD4A3 db    0
+
+对应的每页的列属性：
+
+【所属】
+san11pk.exe:008BCF54 unk_8BCF54 db    1                      ; DATA XREF: san11pk.exe:008BD454↓o
+san11pk.exe:008BCF55 db    0
+san11pk.exe:008BCF56 db    0
+san11pk.exe:008BCF57 db    0
+san11pk.exe:008BCF58 db  4Bh ; K
+san11pk.exe:008BCF59 db    0
+san11pk.exe:008BCF5A db    0
+san11pk.exe:008BCF5B db    0
+san11pk.exe:008BCF5C db  13h
+san11pk.exe:008BCF5D db    0
+san11pk.exe:008BCF5E db    0
+san11pk.exe:008BCF5F db    0
+san11pk.exe:008BCF60 db    3
+san11pk.exe:008BCF61 db    0
+san11pk.exe:008BCF62 db    0
+san11pk.exe:008BCF63 db    0
+san11pk.exe:008BCF64 db    4
+san11pk.exe:008BCF65 db    0
+san11pk.exe:008BCF66 db    0
+san11pk.exe:008BCF67 db    0
+san11pk.exe:008BCF68 db  14h
+san11pk.exe:008BCF69 db    0
+san11pk.exe:008BCF6A db    0
+san11pk.exe:008BCF6B db    0
+san11pk.exe:008BCF6C db  55h ; U
+san11pk.exe:008BCF6D db    0
+san11pk.exe:008BCF6E db    0
+san11pk.exe:008BCF6F db    0
+san11pk.exe:008BCF70 db  17h
+san11pk.exe:008BCF71 db    0
+san11pk.exe:008BCF72 db    0
+san11pk.exe:008BCF73 db    0
+san11pk.exe:008BCF74 db  18h
+san11pk.exe:008BCF75 db    0
+san11pk.exe:008BCF76 db    0
+san11pk.exe:008BCF77 db    0
+
+【能力】
+san11pk.exe:00950140 unk_950140 db    1                      ; DATA XREF: san11pk.exe:008BD460↑o
+san11pk.exe:00950141 db    0
+san11pk.exe:00950142 db    0
+san11pk.exe:00950143 db    0
+san11pk.exe:00950144 db  14h
+san11pk.exe:00950145 db    0
+san11pk.exe:00950146 db    0
+san11pk.exe:00950147 db    0
+san11pk.exe:00950148 db  44h ; D
+san11pk.exe:00950149 db    0
+san11pk.exe:0095014A db    0
+san11pk.exe:0095014B db    0
+san11pk.exe:0095014C db  45h ; E
+san11pk.exe:0095014D db    0
+san11pk.exe:0095014E db    0
+san11pk.exe:0095014F db    0
+san11pk.exe:00950150 db  46h ; F
+san11pk.exe:00950151 db    0
+san11pk.exe:00950152 db    0
+san11pk.exe:00950153 db    0
+san11pk.exe:00950154 db  47h ; G
+san11pk.exe:00950155 db    0
+san11pk.exe:00950156 db    0
+san11pk.exe:00950157 db    0
+san11pk.exe:00950158 db  48h ; H
+san11pk.exe:00950159 db    0
+san11pk.exe:0095015A db    0
+san11pk.exe:0095015B db    0
+san11pk.exe:0095015C db  0Eh
+san11pk.exe:0095015D db    0
+san11pk.exe:0095015E db    0
+san11pk.exe:0095015F db    0
+san11pk.exe:00950160 db  28h ; (
+san11pk.exe:00950161 db    0
+san11pk.exe:00950162 db    0
+san11pk.exe:00950163 db    0
+san11pk.exe:00950164 db  39h ; 9
+san11pk.exe:00950165 db    0
+san11pk.exe:00950166 db    0
+san11pk.exe:00950167 db    0
+san11pk.exe:00950168 db  54h ; T
+san11pk.exe:00950169 db    0
+san11pk.exe:0095016A db    0
+san11pk.exe:0095016B db    0
+
+【特技】
+san11pk.exe:008BCF48 unk_8BCF48 db    1                      ; DATA XREF: san11pk.exe:008BD46C↓o
+san11pk.exe:008BCF49 db    0
+san11pk.exe:008BCF4A db    0
+san11pk.exe:008BCF4B db    0
+san11pk.exe:008BCF4C db  2Ah ; *
+san11pk.exe:008BCF4D db    0
+san11pk.exe:008BCF4E db    0
+san11pk.exe:008BCF4F db    0
+san11pk.exe:008BCF50 db  5Dh ; ]
+san11pk.exe:008BCF51 db    0
+san11pk.exe:008BCF52 db    0
+san11pk.exe:008BCF53 db    0
+
+【适性】
+san11pk.exe:008BCF8C unk_8BCF8C db    1                      ; DATA XREF: san11pk.exe:008BD478↓o
+san11pk.exe:008BCF8D db    0
+san11pk.exe:008BCF8E db    0
+san11pk.exe:008BCF8F db    0
+san11pk.exe:008BCF90 db  74h ; t
+san11pk.exe:008BCF91 db    0
+san11pk.exe:008BCF92 db    0
+san11pk.exe:008BCF93 db    0
+san11pk.exe:008BCF94 db  75h ; u
+san11pk.exe:008BCF95 db    0
+san11pk.exe:008BCF96 db    0
+san11pk.exe:008BCF97 db    0
+san11pk.exe:008BCF98 db  76h ; v
+san11pk.exe:008BCF99 db    0
+san11pk.exe:008BCF9A db    0
+san11pk.exe:008BCF9B db    0
+san11pk.exe:008BCF9C db  77h ; w
+san11pk.exe:008BCF9D db    0
+san11pk.exe:008BCF9E db    0
+san11pk.exe:008BCF9F db    0
+san11pk.exe:008BCFA0 db  78h ; x
+san11pk.exe:008BCFA1 db    0
+san11pk.exe:008BCFA2 db    0
+san11pk.exe:008BCFA3 db    0
+san11pk.exe:008BCFA4 db  79h ; y
+san11pk.exe:008BCFA5 db    0
+san11pk.exe:008BCFA6 db    0
+san11pk.exe:008BCFA7 db    0
+
+【命令】
+san11pk.exe:008BCF78 unk_8BCF78 db    1                      ; DATA XREF: san11pk.exe:008BD484↓o
+san11pk.exe:008BCF79 db    0
+san11pk.exe:008BCF7A db    0
+san11pk.exe:008BCF7B db    0
+san11pk.exe:008BCF7C db  51h ; Q
+san11pk.exe:008BCF7D db    0
+san11pk.exe:008BCF7E db    0
+san11pk.exe:008BCF7F db    0
+san11pk.exe:008BCF80 db  52h ; R
+san11pk.exe:008BCF81 db    0
+san11pk.exe:008BCF82 db    0
+san11pk.exe:008BCF83 db    0
+san11pk.exe:008BCF84 db  53h ; S
+san11pk.exe:008BCF85 db    0
+san11pk.exe:008BCF86 db    0
+san11pk.exe:008BCF87 db    0
+san11pk.exe:008BCF88 db  35h ; 5
+san11pk.exe:008BCF89 db    0
+san11pk.exe:008BCF8A db    0
+san11pk.exe:008BCF8B db    0
+
+【个人】
+san11pk.exe:008BCFA8 unk_8BCFA8 db    1                      ; DATA XREF: san11pk.exe:008BD490↓o
+san11pk.exe:008BCFA9 db    0
+san11pk.exe:008BCFAA db    0
+san11pk.exe:008BCFAB db    0
+san11pk.exe:008BCFAC db  15h
+san11pk.exe:008BCFAD db    0
+san11pk.exe:008BCFAE db    0
+san11pk.exe:008BCFAF db    0
+san11pk.exe:008BCFB0 db  4Ah ; J
+san11pk.exe:008BCFB1 db    0
+san11pk.exe:008BCFB2 db    0
+san11pk.exe:008BCFB3 db    0
+san11pk.exe:008BCFB4 db  56h ; V
+san11pk.exe:008BCFB5 db    0
+san11pk.exe:008BCFB6 db    0
+san11pk.exe:008BCFB7 db    0
+san11pk.exe:008BCFB8 db  2Fh ; /
+san11pk.exe:008BCFB9 db    0
+san11pk.exe:008BCFBA db    0
+san11pk.exe:008BCFBB db    0
+san11pk.exe:008BCFBC db  49h ; I
+san11pk.exe:008BCFBD db    0
+san11pk.exe:008BCFBE db    0
+san11pk.exe:008BCFBF db    0
+san11pk.exe:008BCFC0 db    6
+san11pk.exe:008BCFC1 db    0
+san11pk.exe:008BCFC2 db    0
+san11pk.exe:008BCFC3 db    0
+
+【血缘】
+san11pk.exe:008BCFC4 unk_8BCFC4 db    1                      ; DATA XREF: san11pk.exe:008BD49C↓o
+san11pk.exe:008BCFC4                                         ; san11pk.exe:008BD4F4↓o
+san11pk.exe:008BCFC5 db    0
+san11pk.exe:008BCFC6 db    0
+san11pk.exe:008BCFC7 db    0
+san11pk.exe:008BCFC8 db  0Ch
+san11pk.exe:008BCFC9 db    0
+san11pk.exe:008BCFCA db    0
+san11pk.exe:008BCFCB db    0
+san11pk.exe:008BCFCC db  0Dh
+san11pk.exe:008BCFCD db    0
+san11pk.exe:008BCFCE db    0
+san11pk.exe:008BCFCF db    0
+san11pk.exe:008BCFD0 db  10h
+san11pk.exe:008BCFD1 db    0
+san11pk.exe:008BCFD2 db    0
+san11pk.exe:008BCFD3 db    0
+san11pk.exe:008BCFD4 db  0Fh
+san11pk.exe:008BCFD5 db    0
+san11pk.exe:008BCFD6 db    0
+san11pk.exe:008BCFD7 db    0
+
+
+【取武将属性的函数表】
+
+san11pk.exe:004C8E88 jpt_4C884B dd offset loc_4C8E72, offset loc_4C8E7F, offset off_4C8852, offset off_4C885E
+san11pk.exe:004C8E88                                         ; DATA XREF: sub_4C8720+12B↑r
+san11pk.exe:004C8E98 dd offset loc_4C886A, offset loc_4C8877, offset loc_4C8A58, offset loc_4C8A61 ; jump table for switch statement
+san11pk.exe:004C8EA8 dd offset loc_4C8A7E, offset loc_4C8913, offset loc_4C8880, offset loc_4C8889
+san11pk.exe:004C8EB8 dd offset loc_4C8892, offset sub_9501E0, offset loc_4C889B, offset loc_4C88A4
+san11pk.exe:004C8EC8 dd offset loc_4C8A74, offset loc_4C88CC, offset loc_4C88D8, offset loc_4C891C
+san11pk.exe:004C8ED8 dd offset loc_4C8928, offset loc_4C8934, offset loc_4C8A8B, offset loc_4C8AA6
+san11pk.exe:004C8EE8 dd offset loc_4C8AF2, offset loc_4C8AB3, offset loc_4C8940, offset loc_4C8AD8
+san11pk.exe:004C8EF8 dd offset loc_4C8951, offset loc_4C895D, offset loc_4C8969, offset loc_4C8975
+san11pk.exe:004C8F08 dd offset loc_4C8981, offset loc_4C898D, offset loc_4C8999, offset loc_4C89A5
+san11pk.exe:004C8F18 dd offset loc_4C89B1, offset loc_4C89BD, offset loc_4C89C9, offset loc_4C89D5
+san11pk.exe:004C8F28 dd offset loc_4C89E2, offset loc_4C89EF, offset loc_4C89FC, offset loc_4C8A09
+san11pk.exe:004C8F38 dd offset loc_4C8A15, offset loc_4C8A21, offset loc_4C8C78, offset loc_4C8A4B
+san11pk.exe:004C8F48 dd offset loc_4C8AE5, offset loc_4C8B30, offset loc_4C8B06, offset loc_4C8B44
+san11pk.exe:004C8F58 dd offset loc_4C8B51, offset loc_4C8D13, offset loc_4C88E5, offset loc_4C8B61
+san11pk.exe:004C8F68 dd offset loc_4C8B6E, offset loc_4C8B7B, offset loc_4C8B88, offset loc_4C8B95
+san11pk.exe:004C8F78 dd offset loc_4C8BA1, offset loc_4C8BC1, offset loc_4C8BEE, offset loc_4C8C2D
+san11pk.exe:004C8F88 dd offset loc_4C8C84, offset loc_4C8A2E, offset loc_4C8CC3, offset loc_4C8CD0
+san11pk.exe:004C8F98 dd offset loc_4C8CDD, offset loc_4C8D20, offset loc_4C8D68, offset loc_4C8D7D
+san11pk.exe:004C8FA8 dd offset loc_4C8D89, offset loc_4C8D96, offset loc_4C8DA5, offset loc_4C8DB4
+san11pk.exe:004C8FB8 dd offset loc_4C8DC0, offset loc_4C8DCD, offset loc_4C8DF2, offset loc_4C8E2E
+san11pk.exe:004C8FC8 dd offset loc_4C8E43, offset loc_4C8E59, offset loc_4C8B1A, offset loc_4C8E72
+
+【命令编号->跳表中序号的映射】
+san11pk.exe:004C8FD8 byte_4C8FD8 db      0,     1,   53h,     2,     3,     4,     5,     6,     7,     8
+san11pk.exe:004C8FD8                                         ; DATA XREF: sub_4C8720+124↑r
+san11pk.exe:004C8FE2 db      9,   0Ah,   0Bh,   0Ch,   0Dh,   0Eh,   0Fh,   10h,   11h,   12h ; indirect table for switch statement
+san11pk.exe:004C8FEC db    13h,   14h,   15h,   16h,   17h,   18h,   18h,   18h,   18h,   18h
+san11pk.exe:004C8FF6 db    19h,   19h,   19h,   19h,   19h,   1Ah,   1Ah,   1Ah,   1Ah,   1Ah
+san11pk.exe:004C9000 db    1Bh,   1Ch,   1Dh,   1Eh,   1Fh,   20h,   21h,   22h,   23h,   24h
+san11pk.exe:004C900A db    25h,   26h,   53h,   27h,   28h,   29h,   2Ah,   2Bh,   2Ch,   2Dh
+san11pk.exe:004C9014 db    2Eh,   2Fh,   30h,   31h,   31h,   31h,   31h,   31h,   32h,   32h
+san11pk.exe:004C901E db    32h,   32h,   32h,   33h,   34h,   35h,   36h,   37h,   38h,   39h
+san11pk.exe:004C9028 db    3Ah,   3Bh,   3Ch,   3Dh,   3Eh,   3Fh,   40h,   41h,   42h,   43h
+san11pk.exe:004C9032 db    44h,   45h,   36h,     1,   46h,   47h,   48h,   49h,   4Ah,   4Bh
+san11pk.exe:004C903C db    4Ch,   4Dh,   4Eh,   13h,     1,   4Fh,   53h,   53h,   53h,   53h
+san11pk.exe:004C9046 db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C9050 db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C905A db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C9064 db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C906E db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C9078 db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C9082 db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C908C db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C9096 db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C90A0 db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C90AA db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C90B4 db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C90BE db    53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h,   53h
+san11pk.exe:004C90C8 db    53h,   50h,   50h,   50h,   50h,   50h,   51h,     2,     3,   13h
+san11pk.exe:004C90D2 db    2Bh,   52h,   52h,   52h,   52h,   52h,   1Bh,   3Eh,   1Dh,     1
+san11pk.exe:004C90DC db    27h,   34h,   40h
+san11pk.exe:004C90DF db  33h ; 3
