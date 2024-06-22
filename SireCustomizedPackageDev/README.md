@@ -887,6 +887,18 @@ print(f"Memory range from {hex(start_address)} to {hex(end_address)} saved to {o
 
 Big5 batch decode 则是批量解码+注释，输入终止地址后，便可在所在地址和终止地址之间重复执行解码+注释，这样便可将所有字符串都解析出来，效率简直起飞！
 
+### 批量更新 IDA 中的结构体声明
+
+IDA 脚本： SireCustomizedPackageDev\ida-scripts\ida_structs\update_ida_struct.py
+
+更新该脚本同目录下描述结构体的 txt 文件后，便可通过该脚本批量更新或创建 IDA Structure。
+
+### 批量分析各结构体内存分布
+
+脚本： SireCustomizedPackageDev\ida-scripts\ida_structs\analyze_structs.py
+
+![analyze_structs.png](./analyze_structs.png)
+
 ### 批量分析各自定义包新增的修改地址区间
 
 为快速了解其他开发者在san11pk内存中哪些块已经被引用，开发了一个脚本 [analyze_scp.py](./analyze_scp.py)，用于批量分析所有 scp 文件，找到所有修改的地址区间，方便后续分析。
@@ -895,8 +907,3 @@ Big5 batch decode 则是批量解码+注释，输入终止地址后，便可在�
 
 ![image-20240616183022870](./assets/image-20240616183022870.png)
 
-### 批量更新 IDA 中的结构体声明
-
-IDA 脚本： SireCustomizedPackageDev\ida-scripts\ida_structs\update_ida_struct.py
-
-更新该脚本同目录下描述结构体的 txt 文件后，便可通过该脚本批量更新或创建 IDA Structure。

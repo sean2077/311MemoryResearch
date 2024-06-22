@@ -51,7 +51,7 @@ def parse_defined_struct_txt(file_path: str) -> dict:
 
     st = {
         "struct_name_zh": "",  # 从文件中提取的结构体中文名
-        "fields": [],
+        "fields": [],  # field: (offset, nbytes, field_name, field_comment)
         "ida_struct_name": None,  # 从文件中提取的 IDA 结构体名
         "struct_size": None,  # 若文件中设置，将进行大小校验
         "comment": "",

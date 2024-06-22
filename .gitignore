@@ -333,3 +333,5 @@ ASALocalRun/
 
 # Vscode
 .vscode
+
+tmp.*
