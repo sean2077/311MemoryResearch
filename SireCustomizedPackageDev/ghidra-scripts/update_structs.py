@@ -48,9 +48,10 @@ def clean_field_name(name: str) -> str:
     return name
 
 
+started_selection_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "structs")
+
+
 def choose_files():
-    # 获取脚本所在目录
-    script_dir = os.path.dirname(os.path.abspath(__file__))
 
     # 创建一个文件选择器
     file_chooser = JFileChooser()
@@ -62,7 +63,7 @@ def choose_files():
     file_chooser.setMultiSelectionEnabled(True)
 
     # 设置初始目录为脚本所在目录
-    file_chooser.setCurrentDirectory(File(script_dir))
+    file_chooser.setCurrentDirectory(File(started_selection_path))
 
     # 显示打开文件对话框
     result = file_chooser.showOpenDialog(None)
