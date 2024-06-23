@@ -907,3 +907,7 @@ IDA 脚本： SireCustomizedPackageDev\ida-scripts\ida_structs\update_ida_struct
 
 ![image-20240616183022870](./assets/image-20240616183022870.png)
 
+### 分析san11pk未使用的内存区间
+
+Ghidra 脚本：SireCustomizedPackageDev\ghidra-scripts\find_unused_memory_blocks.py
+
