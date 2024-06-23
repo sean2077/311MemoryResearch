@@ -88,14 +88,7 @@ listing = currentProgram().getListing()
 
 memory = currentProgram().getMemory()
 
-default_address_space = currentProgram().getAddressFactory().getDefaultAddressSpace()
-
 fpapi = FlatProgramAPI(currentProgram())
-
-
-# helper function to get a Ghidra Address type
-def getAddress(offset: int):
-    return default_address_space.getAddress(offset)
 
 
 def get_4_bytes(addr):
@@ -383,21 +376,21 @@ class Struct:
             else:  # 仅提供了起始地址，需自行查找 end_addr 和 array_size
                 # 大部分结构体第一个字段是指向该类结构体函数的指针，可根据这个特征来查找数组的结束地址
                 # 如果不是该特征，则无法自动查找结束地址，需要手动指定
-                array_size = find_struct_array_size(getAddress(array_start_addr), self.size)
+                array_size = find_struct_array_size(toAddr(array_start_addr), self.size)
                 self.array_end_addrs.append(array_start_addr + array_size * self.size)
                 self.array_sizes.append(array_size)
 
-            apply_struct_array_to_memory(struct, getAddress(array_start_addr), array_size)
+            apply_struct_array_to_memory(struct, toAddr(array_start_addr), array_size)
 
             # 创建数组标签
             array_name = self.name_zh + "数组"
             if i > 0:
                 array_name += f"_{i + 1}"
-            fpapi.createLabel(getAddress(array_start_addr), array_name, True)
+            fpapi.createLabel(toAddr(array_start_addr), array_name, True)
 
             # 给数组添加注释
             array_comment = f"{self.name_zh}数组。数组大小：{array_size}, 结构体大小：0x{self.size:x}。"
-            listing.setComment(getAddress(array_start_addr), CodeUnit.PLATE_COMMENT, array_comment)
+            listing.setComment(toAddr(array_start_addr), CodeUnit.PLATE_COMMENT, array_comment)
 
     def update_file(self):
         """更新文件"""
