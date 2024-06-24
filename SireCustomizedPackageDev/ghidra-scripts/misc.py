@@ -1,6 +1,6 @@
 #!python3
 """
-杂项任务.
+杂项.
 
 功能：
     - 排序 函数汇总.md 中的函数
@@ -19,7 +19,12 @@ app = Typer(add_completion=False)
 
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-FUNCTIONS_DIR = os.path.join(SCRIPT_DIR, "functions")
+
+
+##########################################################################
+###                              函数相关                               ###
+##########################################################################
+
 ALL_FUNCTIONS_FILE = os.path.join(SCRIPT_DIR, "函数汇总.md")
 
 
@@ -52,11 +57,12 @@ class Function:
         name = clean_name(name.strip())
         tags = tags.strip()
         tags = list(tags.strip().split(",")) if tags else []
+        tags.sort()
         comment = comment.strip()
         return cls(address, name, comment, tags)
 
 
-def _collect_functions(file_path):
+def _collect_functions(file_path: str) -> list[Function]:
     dest_functions = []
 
     with open(file_path, "r", encoding="utf-8") as f:
@@ -146,6 +152,11 @@ def sort_func(
 
     # 写入文件
     _write_functions(functions, ALL_FUNCTIONS_FILE)
+
+
+##########################################################################
+###                              结构体相关                               ###
+##########################################################################
 
 
 if __name__ == "__main__":
