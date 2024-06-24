@@ -1,4 +1,4 @@
-# TODO write a description for this script
+# 找出二进制文件中未使用的内存块，即值为0且没有被引用的内存块
 # @author
 # @category Python 3
 # @keybinding

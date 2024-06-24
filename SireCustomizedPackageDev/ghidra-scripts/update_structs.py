@@ -21,8 +21,16 @@ from ghidra.program.model.data import (
     Undefined,
 )
 from ghidra.program.model.listing import CodeUnit
+from ghidra.program.model.symbol import SourceType, SymbolType
 from java.io import File
 from javax.swing import JFileChooser
+
+currentProgram = getCurrentProgram()
+data_type_manager = currentProgram.getDataTypeManager()
+listing = currentProgram.getListing()
+memory = currentProgram.getMemory()
+symbolTable = currentProgram.getSymbolTable()
+fpapi = FlatProgramAPI(currentProgram)
 
 
 def get_now_time():
@@ -81,19 +89,8 @@ def choose_files():
         return []
 
 
-# 获取当前程序的数据类型管理器
-data_type_manager = currentProgram().getDataTypeManager()
-
-# 获取当前程序的 listing
-listing = currentProgram().getListing()
-
-memory = currentProgram().getMemory()
-
-fpapi = FlatProgramAPI(currentProgram())
-
-
 def get_4_bytes(addr):
-    return tuple(memory.getByte(addr.add(i)) for i in range(4))  # 4 bytes
+    return tuple((memory.getByte(addr.add(i)) & 0xFF) for i in range(4))  # Ensure unsigned bytes
 
 
 def find_struct_array_size(start_addr, struct_size):
@@ -392,6 +389,16 @@ class Struct:
             # 给数组添加注释
             array_comment = f"{self.name_zh}数组。数组大小：{array_size}, 结构体大小：0x{self.size:x}。"
             listing.setComment(toAddr(array_start_addr), CodeUnit.PLATE_COMMENT, array_comment)
+
+            # 给结构体相关函数所在地址添加标签
+            func_addr = get_4_bytes(toAddr(array_start_addr))
+            func_addr = int.from_bytes(func_addr, "little")
+            symbol = symbolTable.getPrimarySymbol(toAddr(func_addr))
+            if symbol and symbol.getSymbolType() == SymbolType.LABEL:
+                symbol.setName(f"{self.name_zh}相关函数所在地址", SourceType.USER_DEFINED)
+                print(f"Symbol at 0x{func_addr:X} renamed to '{self.name_zh}相关函数所在地址'")
+            else:
+                print(f"Symbol at 0x{func_addr:X} not found.")
 
     def update_file(self):
         """更新文件"""

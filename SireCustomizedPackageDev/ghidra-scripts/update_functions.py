@@ -1,4 +1,4 @@
-# 更新 Ghidra 中的函数名称和注释
+# 更新 Ghidra 中的函数名称和注释, 以及一些 Label 的名称和注释
 # @author
 # @category Python 3
 # @keybinding
@@ -37,6 +37,8 @@ def update_struct(file_path: str):
         if func:
             func.setName(function.name, SourceType.USER_DEFINED)
             func.setComment(function.comment)
+            for tag in function.tags:
+                func.addTag(tag)
             print(f"Function at 0x{function.address:X} renamed to '{function.name}'")
             continue
 
