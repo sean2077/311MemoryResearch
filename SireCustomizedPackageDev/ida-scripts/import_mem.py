@@ -101,12 +101,14 @@ def import_records(records_file: str):
 
     for record in records:
         flags = idaapi.get_flags(record.address)
-        if idaapi.get_func(record.address):
+        if idaapi.is_unknown(flags):
+            idaapi.msg(f"Address at {record.address} is undefined. Skipped.\n")
+            continue
+        func = idaapi.get_func(record.address)
+        if func and func.start_ea == record.address:
             idaapi.set_name(record.address, record.name)
             idaapi.set_func_cmt(record.address, record.comment, True)
             idaapi.msg(f"Function at {record.address:x} name updated to {record.name}.\n")
-        elif idaapi.is_unknown(flags):
-            idaapi.msg(f"Address at {record.address} is undefined. Skipped.\n")
         else:
             idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
             idaapi.set_cmt(record.address, record.comment, True)
