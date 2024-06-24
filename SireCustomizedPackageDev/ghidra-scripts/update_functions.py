@@ -9,11 +9,12 @@ import os
 import sys
 
 from ghidra.program.model.listing import CodeUnit
-from ghidra.program.model.symbol import SourceType
+from ghidra.program.model.symbol import SourceType, SymbolType
 
 currentProgram = getCurrentProgram()
 functionManager = currentProgram.getFunctionManager()
 listing = currentProgram.getListing()
+symbolTable = currentProgram.getSymbolTable()
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -31,15 +32,23 @@ def update_struct(file_path: str):
 
     # 更新函数
     for function in functions:
-        func = functionManager.getFunctionAt(toAddr(function.address))
+        addr = toAddr(function.address)
+        func = functionManager.getFunctionAt(addr)
         if func:
             func.setName(function.name, SourceType.USER_DEFINED)
             func.setComment(function.comment)
             print(f"Function at 0x{function.address:X} renamed to '{function.name}'")
-        else:
-            print(f"Function at 0x{function.address:X} not found.")
-            # 在此处添加comment
-            listing.setComment(toAddr(function.address), CodeUnit.REPEATABLE_COMMENT, function.comment)
+            continue
+
+        symbol = symbolTable.getPrimarySymbol(addr)
+        if symbol and symbol.getSymbolType() == SymbolType.LABEL:
+            symbol.setName(function.name, SourceType.USER_DEFINED)
+            listing.setComment(addr, CodeUnit.REPEATABLE_COMMENT, function.comment)
+            print(f"Symbol at 0x{function.address:X} renamed to '{function.name}'")
+            continue
+
+        listing.setComment(addr, CodeUnit.REPEATABLE_COMMENT, function.comment)
+        print(f"Function at 0x{function.address:X} not found.")
 
 
 update_struct(ALL_FUNCTIONS_FILE)
