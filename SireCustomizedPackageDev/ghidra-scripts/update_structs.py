@@ -1,4 +1,4 @@
-# TODO write a description for this script
+# 更新 Ghidra 中的结构体定义和数组
 # @author
 # @category Python 3
 # @keybinding

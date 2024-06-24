@@ -23,7 +23,7 @@ MISC_PATH = os.path.join(SCRIPT_DIR, "misc.py")
 if MISC_PATH not in sys.path:
     sys.path.append(MISC_PATH)
 
-from misc import ALL_FUNCTIONS_FILE, _collect_functions
+from misc import ALL_FUNCTIONS_FILE, _collect_functions, _write_functions
 
 
 def update_struct(file_path: str):
@@ -49,6 +49,12 @@ def update_struct(file_path: str):
 
         listing.setComment(addr, CodeUnit.REPEATABLE_COMMENT, function.comment)
         print(f"Function at 0x{function.address:X} not found.")
+
+    # 按地址排序
+    functions.sort(key=lambda x: x.address)
+
+    # 保存函数
+    _write_functions(functions, file_path)
 
 
 update_struct(ALL_FUNCTIONS_FILE)
