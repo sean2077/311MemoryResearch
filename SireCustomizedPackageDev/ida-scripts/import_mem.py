@@ -114,8 +114,9 @@ def import_records(records_file: str):
             idaapi.set_cmt(record.address, record.comment, True)
             idaapi.msg(f"Address at {record.address:x} name updated to {record.name}.\n")
 
-    # 按地址排序
+    # 先按地址排序，再按类别排序
     records.sort(key=lambda x: x.address)
+    records.sort(key=lambda x: x.type)
 
     # 保存记录
     save_records(records, records_file)
@@ -124,16 +125,13 @@ def import_records(records_file: str):
     idaapi.msg("Done.\n")
 
 
-# import_records(MEM_RECORDS_FILE)
+def action():
+    import_records(MEM_RECORDS_FILE)
 
 
 ##########################################################################
 ###                        IDA Plugin 接口相关                           ###
 ##########################################################################
-
-
-def action():
-    import_records(MEM_RECORDS_FILE)
 
 
 class ImportMemPlugin(idaapi.plugin_t):
@@ -156,3 +154,7 @@ class ImportMemPlugin(idaapi.plugin_t):
 
 def PLUGIN_ENTRY():
     return ImportMemPlugin()
+
+
+if __name__ == "__main__":
+    action()

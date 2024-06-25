@@ -319,9 +319,6 @@ def action():
     print("-" * 50)
 
 
-# action()
-
-
 ##########################################################################
 ###                        IDA Plugin 接口相关                           ###
 ##########################################################################
@@ -347,3 +344,7 @@ class ImportStructsPlugin(idaapi.plugin_t):
 
 def PLUGIN_ENTRY():
     return ImportStructsPlugin()
+
+
+if __name__ == "__main__":
+    action()
