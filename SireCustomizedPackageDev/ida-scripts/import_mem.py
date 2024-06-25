@@ -172,7 +172,7 @@ def import_records(records_file: str):
                     continue
                 dt_sz = idaapi.get_struc_size(tid)
                 idaapi.del_items(record.address, idaapi.DELIT_SIMPLE, array_size * dt_sz)  # 去掉原有定义
-                if not idaapi.create_data(record.address, idaapi.stru_flag(), dt_sz, tid):
+                if not idaapi.create_struct(record.address, dt_sz, tid):
                     idaapi.warning(f"Failed to create struct {dt_str} at {record.address:x}.\n")
                     continue
             else:
@@ -183,16 +183,24 @@ def import_records(records_file: str):
                     continue
 
             # 创建数组
-            if not idc.make_array(record.address, array_size):
-                idaapi.warning(f"Failed to create array at {record.address:x}.\n")
-                continue
-            ap = idaapi.array_parameters_t()
-            if array_size < 100 or array_size * dt_sz < 0x1000:  # 小数组
+            if array_size <= 100 or array_size * dt_sz < 0x1000:  # 小数组
+                if not idc.make_array(record.address, array_size):
+                    idaapi.warning(f"Failed to create array at {record.address:x}.\n")
+                    continue
+                ap = idaapi.array_parameters_t()
                 ap.flags = idaapi.AP_INDEX | idaapi.AP_IDXDEC | idaapi.AP_ARRAY
                 ap.lineitems = 0 if is_struct_array else 1
+                idaapi.set_array_parameters(record.address, ap)
             else:  # 大数组
-                ap.flags = 0
-            idaapi.set_array_parameters(record.address, ap)
+                for i in range(1, array_size):
+                    if is_struct_array:
+                        if not idaapi.create_struct(record.address + i * dt_sz, tid):
+                            idaapi.warning(f"Failed to create struct {dt_str} at {record.address + i * dt_sz:x}.\n")
+                            continue
+                    else:
+                        if not idc.create_data(record.address + i * dt_sz, dt_flag, dt_sz, idaapi.BADNODE):
+                            idaapi.warning(f"Failed to create data type {dt_str} at {record.address + i * dt_sz:x}.\n")
+                            continue
             idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
             idaapi.set_cmt(record.address, record.comment, True)
             idaapi.msg(f"Array at {record.address:x} created, size: {array_size}, named to {record.name}.\n")

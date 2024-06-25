@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import idaapi
+import idc
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -312,8 +313,18 @@ def import_struct(struct: Struct):
                 idaapi.set_name(func_addr, func_addr_name)
 
             # 创建结构体数组
-            for addr in range(array_start_addr, array_end_addr, struct.size):
-                idaapi.create_struct(addr, struct.size, tid)
+            idaapi.del_items(array_start_addr, idaapi.DELIT_SIMPLE, array_size * struct.size)
+            if array_size <= 100 or array_size * struct.size < 0x1000:  # 小数组
+                idaapi.create_struct(array_start_addr, struct.size, tid)
+                if not idc.make_array(array_start_addr, array_size):
+                    idaapi.warning(f"Failed to create array at {array_start_addr:X}.\n")
+                    continue
+                ap = idaapi.array_parameters_t()
+                ap.flags = idaapi.AP_INDEX | idaapi.AP_IDXDEC | idaapi.AP_ARRAY
+                idaapi.set_array_parameters(array_start_addr, ap)
+            else:  # 大数组
+                for addr in range(array_start_addr, array_end_addr, struct.size):
+                    idaapi.create_struct(addr, struct.size, tid)
 
             # 结构体数组名和注释
             array_name = f"{struct.name}_ARRAY"
