@@ -147,7 +147,27 @@ def import_records(records_file: str):
             idaapi.msg(f"Function at {record.address:x} name updated to {record.name}.\n")
             continue
 
-        # 2. 如果为数表，创建数组
+        # 2. 如果为参数
+        if record.type in ["参数"]:
+            param_type = record._info.get("type", None)
+            if param_type:
+                if param_type.startswith("struct_"):
+                    tid = idaapi.get_struc_id(param_type)
+                    if tid == idaapi.BADADDR:
+                        idaapi.warning(f"Struct {param_type} not found. Skipped.\n")
+                        continue
+                    dt_sz = idaapi.get_struc_size(tid)
+                    idaapi.create_struct(record.address, dt_sz, tid)
+                else:
+                    dt_flag, dt_sz = get_ida_data_type_flag(param_type)
+                    idaapi.create_data(record.address, dt_flag, dt_sz, idaapi.BADNODE)
+
+            idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
+            idaapi.set_cmt(record.address, record.comment, True)
+            idaapi.msg(f"Parameter at {record.address:x} created, named to {record.name}.\n")
+            continue
+
+        # 3. 如果为数表，创建数组
         if record.type in ["数表"]:
             table_type = record._info.get("type", None)  # data_type[array_size]
             if not table_type:
@@ -183,15 +203,20 @@ def import_records(records_file: str):
                     continue
 
             # 创建数组
-            if array_size <= 100 or array_size * dt_sz < 0x1000:  # 小数组
+            need_create_array = (array_size <= 100 or array_size * dt_sz < 0x1000) and (
+                record._info.get("no_array", "0") != "1"
+            )
+            if need_create_array:
                 if not idc.make_array(record.address, array_size):
                     idaapi.warning(f"Failed to create array at {record.address:x}.\n")
                     continue
                 ap = idaapi.array_parameters_t()
-                ap.flags = idaapi.AP_INDEX | idaapi.AP_IDXDEC | idaapi.AP_ARRAY
+                ap.flags = idaapi.AP_INDEX | idaapi.AP_IDXDEC
+                if not record._info.get("no_array", False):
+                    ap.flags |= idaapi.AP_ARRAY
                 ap.lineitems = 0 if is_struct_array else 1
                 idaapi.set_array_parameters(record.address, ap)
-            else:  # 大数组
+            else:
                 for i in range(1, array_size):
                     if is_struct_array:
                         if not idaapi.create_struct(record.address + i * dt_sz, tid):
@@ -201,10 +226,15 @@ def import_records(records_file: str):
                         if not idc.create_data(record.address + i * dt_sz, dt_flag, dt_sz, idaapi.BADNODE):
                             idaapi.warning(f"Failed to create data type {dt_str} at {record.address + i * dt_sz:x}.\n")
                             continue
+
+            # 补充数组信息
+            array_detail = f"[end={record.address+dt_sz*array_size:x},size={array_size},item_size={dt_sz:#x}]"
+            if not record.comment.startswith(array_detail):
+                record.comment = array_detail + " " + record.comment
+
             idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
             idaapi.set_cmt(record.address, record.comment, True)
             idaapi.msg(f"Array at {record.address:x} created, size: {array_size}, named to {record.name}.\n")
-
             continue
 
         # 其他情况，更新地址名称和注释
