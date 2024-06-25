@@ -117,6 +117,7 @@ class Struct:
     array_end_addrs: list[int]
     array_sizes: list[int]
     array_updated: bool = False
+    id: int = -1
 
     _file_path: str = ""
     _last_updated: str = ""
@@ -132,6 +133,7 @@ class Struct:
         array_end_addrs = []
         array_sizes = []
         array_updated = False
+        struct_id = -1
 
         with open(file_path, "r", encoding="utf-8") as file:
             field_line_started = False
@@ -148,6 +150,10 @@ class Struct:
                     elif line.startswith("# struct_size:"):
                         sz = line.split(":")[-1].strip()
                         size = int(sz, 16) if sz.startswith("0x") else int(sz)
+                    elif line.startswith("# struct_id:"):
+                        s = line.split(":")[-1].strip()
+                        if s:
+                            struct_id = int(s, 16)
                     elif line.startswith("# array_start_addrs:"):
                         s = line.split(":")[-1].strip()
                         if s:
@@ -183,7 +189,9 @@ class Struct:
         if len(array_start_addrs) != len(array_sizes):
             array_sizes = []  # reset array_sizes
 
-        ret = cls(name, name_zh, fields, size, comment, array_start_addrs, array_end_addrs, array_sizes, array_updated)
+        ret = cls(
+            name, name_zh, fields, size, comment, array_start_addrs, array_end_addrs, array_sizes, array_updated, struct_id
+        )
         ret._file_path = file_path
         ret._last_updated = get_now_time()
 
@@ -195,6 +203,8 @@ class Struct:
         with open(self._file_path, "r", encoding="utf-8") as file:
             lines = file.readlines()
             for i, line in enumerate(lines):
+                if lines[i].startswith("# struct_id:"):
+                    lines[i] = f"# struct_id: {self.id:#x}\n"
                 if line.startswith("# array_end_addrs:"):
                     lines[i] = f"# array_end_addrs: {','.join(map(format_address, self.array_end_addrs))}\n"
                 if line.startswith("# array_sizes:"):
@@ -227,7 +237,18 @@ def _find_struct_array_size(start_addr, struct_size):
 def import_struct(struct: Struct):
     # 先判断结构体是否已经存在，如果存在则对齐进行更新，否则创建新的结构体
     is_update = False
-    tid = idaapi.get_struc_id(struct.name)
+
+    tid = struct.id
+    if tid == -1:  # 若未指定 id，则根据名称查找
+        tid = idaapi.get_struc_id(struct.name)
+        struct.id = tid
+    else:
+        struct_name = idaapi.get_struc_name(tid)
+        if struct_name != struct.name:
+            idaapi.set_struc_name(tid, struct.name)
+            idaapi.msg(f"Struct {struct_name} renamed to {struct.name}.\n")
+        tid = idaapi.get_struc_id(struct.name)
+
     if tid == idaapi.BADADDR:
         tid = idaapi.add_struc(idaapi.BADADDR, struct.name)
         idaapi.msg(f"Struct {struct.name} created.\n")
