@@ -306,7 +306,7 @@ def import_struct(struct: Struct):
             )
 
 
-def main():
+def action():
     fps = ask_file_paths()
     for i, fp in enumerate(fps):
         print(f"Processing {i + 1}/{len(fps)}: {fp}")
@@ -319,4 +319,31 @@ def main():
     print("-" * 50)
 
 
-main()
+# action()
+
+
+##########################################################################
+###                        IDA Plugin 接口相关                           ###
+##########################################################################
+
+
+class ImportStructsPlugin(idaapi.plugin_t):
+    flags = 0
+    comment = "Import structs from markdown files."
+    help = "Alt-Shift-S to import structs from markdown files."
+    wanted_name = "Import Structs (@san11pk)"
+    wanted_hotkey = "Alt-Shift-S"
+
+    def init(self):
+        idaapi.msg("ImportStructsPlugin initialized.\n")
+        return idaapi.PLUGIN_OK
+
+    def run(self, arg):
+        action()
+
+    def term(self):
+        idaapi.msg("ImportStructsPlugin terminated.\n")
+
+
+def PLUGIN_ENTRY():
+    return ImportStructsPlugin()

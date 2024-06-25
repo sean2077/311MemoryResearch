@@ -95,7 +95,7 @@ def save_records(records: list[Record], dest_file: str = MEM_RECORDS_FILE):
 
 def import_records(records_file: str):
     idaapi.msg("-" * 50 + "\n")
-    idaapi.msg("Importing records...\n")
+    idaapi.msg(f"Importing records from {records_file}...\n")
 
     records = collect_records(records_file)
 
@@ -124,4 +124,35 @@ def import_records(records_file: str):
     idaapi.msg("Done.\n")
 
 
-import_records(MEM_RECORDS_FILE)
+# import_records(MEM_RECORDS_FILE)
+
+
+##########################################################################
+###                        IDA Plugin 接口相关                           ###
+##########################################################################
+
+
+def action():
+    import_records(MEM_RECORDS_FILE)
+
+
+class ImportMemPlugin(idaapi.plugin_t):
+    flags = 0
+    comment = "Import san11pk memory records."
+    help = "Alt-Shift-M to import san11pk memory records."
+    wanted_name = "Import Memory Records (@san11pk)"
+    wanted_hotkey = "Alt-Shift-M"
+
+    def init(self):
+        idaapi.msg("ImportMemPlugin initialized.\n")
+        return idaapi.PLUGIN_KEEP
+
+    def run(self, arg):
+        action()
+
+    def term(self):
+        idaapi.msg("ImportMemPlugin terminated.\n")
+
+
+def PLUGIN_ENTRY():
+    return ImportMemPlugin()
