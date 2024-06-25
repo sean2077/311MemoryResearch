@@ -282,6 +282,7 @@ def import_struct(struct: Struct):
 
     # IDA 视图中创建结构体数组
     if not struct.array_updated and len(struct.array_start_addrs) > 0:
+        struct.array_updated = True
         for i, array_start_addr in enumerate(struct.array_start_addrs):
             # 先找出数组的结束地址和大小
             if len(struct.array_end_addrs) > i:
