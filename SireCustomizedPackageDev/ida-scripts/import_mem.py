@@ -211,9 +211,13 @@ def import_records(records_file: str):
                     idaapi.warning(f"Failed to create array at {record.address:x}.\n")
                     continue
                 ap = idaapi.array_parameters_t()
-                ap.flags = idaapi.AP_INDEX | idaapi.AP_IDXDEC
-                if not record._info.get("no_array", False):
-                    ap.flags |= idaapi.AP_ARRAY
+                ap.flags = idaapi.AP_INDEX
+                if record._info.get("no_array", None) != "1":
+                    ap.flags |= idaapi.AP_ARRAY  # 默认 create_array
+                if record._info.get("idxhex", None) != "1":
+                    ap.flags |= idaapi.AP_IDXDEC  # 默认十进制
+                else:
+                    ap.flags |= idaapi.AP_IDXHEX
                 ap.lineitems = 0 if is_struct_array else 1
                 idaapi.set_array_parameters(record.address, ap)
             else:
