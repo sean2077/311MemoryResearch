@@ -80,7 +80,6 @@ class Record:
         name = name.strip()
         tags = tags.strip()
         tags = list(tags.strip().split(",")) if tags else []
-        tags.sort()
         comment = comment.strip()
         ret = cls(address, type_, name, tags, comment)
 
@@ -110,9 +109,10 @@ def collect_records(file_path: str = MEM_RECORDS_FILE) -> list[Record]:
                 continue
             if reach_records:
                 record = Record.from_table_row(line)
+                # 名称冲突处理
                 if record.name:
                     if record.name in name_set:
-                        print(f"Name conflict: {record.name}")
+                        idaapi.warning(f"Name conflict: {record.name}")
                         record.name += f"_{record.address:x}"
                     name_set.add(record.name)
                 records.append(record)
@@ -249,8 +249,19 @@ def import_records(records_file: str):
 
     # 按(类别，标签，地址)排序
     records.sort(key=lambda x: x.address)
-    records.sort(key=lambda x: tuple(sorted(x.tags)), reverse=True)
+    records.sort(key=lambda x: tuple(x.tags), reverse=True)
     records.sort(key=lambda x: x.type)
+
+    # 找出地址重复的记录
+    addr_set = set()
+    duplicate_records = []
+    for record in records:
+        if record.address in addr_set:
+            duplicate_records.append(record)
+        addr_set.add(record.address)
+    idaapi.msg(f"Found {len(duplicate_records)} duplicate records.\n")
+    for record in duplicate_records:
+        idaapi.msg(f"Duplicate record: {record.address:x} {record.name}\n")
 
     # 保存记录
     save_records(records, records_file)
