@@ -210,6 +210,7 @@ def import_records(records_file: str):
                 if not idc.make_array(record.address, array_size):
                     idaapi.warning(f"Failed to create array at {record.address:x}.\n")
                     continue
+                # 设置数组参数
                 ap = idaapi.array_parameters_t()
                 ap.flags = idaapi.AP_INDEX
                 if record._info.get("no_array", None) != "1":
@@ -219,6 +220,8 @@ def import_records(records_file: str):
                 else:
                     ap.flags |= idaapi.AP_IDXHEX
                 ap.lineitems = 0 if is_struct_array else 1
+                if record._info.get("lineitems", None):
+                    ap.lineitems = int(record._info["lineitems"])
                 idaapi.set_array_parameters(record.address, ap)
             else:
                 for i in range(1, array_size):
