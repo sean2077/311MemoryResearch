@@ -34,7 +34,7 @@ def get_ida_data_type(base_dt_str: str):
         return idaapi.FF_BYTE
     if base_dt_str in ("word", "short"):
         return idaapi.FF_WORD
-    if base_dt_str in ("dword", "int", "pointer32"):
+    if base_dt_str in ("dword", "int", "pointer32", "pointer", "address"):
         return idaapi.FF_DWORD
     return idaapi.FF_BYTE
 
@@ -44,7 +44,7 @@ def get_ida_data_type_flag(dt_str):
         return idaapi.byte_flag(), 1
     if dt_str in ("word", "short"):
         return idaapi.word_flag(), 2
-    if dt_str in ("dword", "int", "pointer32"):
+    if dt_str in ("dword", "int", "pointer32", "pointer", "address"):
         return idaapi.dword_flag(), 4
     if dt_str in ("float",):
         return idaapi.float_flag(), 4
