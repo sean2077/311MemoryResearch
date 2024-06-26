@@ -242,8 +242,10 @@ def import_records(records_file: str):
         idaapi.set_cmt(record.address, record.comment, True)
         idaapi.msg(f"Address at {record.address:x} name updated to {record.name}.\n")
 
-    # 刷新 IDA 视图
-    idaapi.refresh_idaview_anyway()
+    # 刷新 IDA 视图和 反编译视图
+    window_refresh_flags = idaapi.IWID_DISASM | idaapi.IWID_PSEUDOCODE
+    idaapi.request_refresh(window_refresh_flags)
+    idaapi.refresh_idaview()
 
     # 先按地址排序，再按类别排序
     records.sort(key=lambda x: x.address)
