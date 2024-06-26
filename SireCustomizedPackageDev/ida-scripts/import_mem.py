@@ -247,8 +247,9 @@ def import_records(records_file: str):
     idaapi.request_refresh(window_refresh_flags)
     idaapi.refresh_idaview()
 
-    # 先按地址排序，再按类别排序
+    # 按(类别，标签，地址)排序
     records.sort(key=lambda x: x.address)
+    records.sort(key=lambda x: tuple(sorted(x.tags)), reverse=True)
     records.sort(key=lambda x: x.type)
 
     # 保存记录
