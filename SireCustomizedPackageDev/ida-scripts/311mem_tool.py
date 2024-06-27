@@ -1,6 +1,8 @@
 #!python
 """
-将内存地址记录导入到 IDA 中
+san11pk内存地址记录工具，支持：
+- 内存地址汇总.md 中的记录导入到 IDA 中
+- IDA 中的内存地址记录导出到 内存地址汇总.md
 """
 import os
 import re
@@ -337,26 +339,26 @@ def action():
 ##########################################################################
 
 
-class ImportMemPlugin(idaapi.plugin_t):
+class San11MemPlugin(idaapi.plugin_t):
     flags = 0
-    comment = "Import san11pk memory records."
-    help = "Alt-Shift-M to import san11pk memory records."
-    wanted_name = "Import Memory Records (@san11pk)"
+    comment = "Import or export memory records (@san11pk)."
+    help = "Alt-Shift-M to import or export san11pk memory records."
+    wanted_name = "San11MemPlugin"
     wanted_hotkey = "Alt-Shift-M"
 
     def init(self):
-        idaapi.msg("ImportMemPlugin initialized.\n")
+        idaapi.msg("San11MemPlugin initialized.\n")
         return idaapi.PLUGIN_KEEP
 
     def run(self, arg):
         action()
 
     def term(self):
-        idaapi.msg("ImportMemPlugin terminated.\n")
+        idaapi.msg("San11MemPlugin terminated.\n")
 
 
 def PLUGIN_ENTRY():
-    return ImportMemPlugin()
+    return San11MemPlugin()
 
 
 if __name__ == "__main__":

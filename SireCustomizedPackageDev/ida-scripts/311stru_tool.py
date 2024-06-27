@@ -1,3 +1,7 @@
+"""
+san11pk's IDA Struct Tool
+"""
+
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -374,11 +378,11 @@ def action():
 ##########################################################################
 
 
-class ImportStructsPlugin(idaapi.plugin_t):
+class San11StruPlugin(idaapi.plugin_t):
     flags = 0
-    comment = "Import structs from markdown files."
-    help = "Alt-Shift-S to import structs from markdown files."
-    wanted_name = "Import Structs (@san11pk)"
+    comment = "Import or export structs (@san11pk)."
+    help = "Alt-Shift-S to import or export structs."
+    wanted_name = "San11StruPlugin"
     wanted_hotkey = "Alt-Shift-S"
 
     def init(self):
@@ -393,7 +397,7 @@ class ImportStructsPlugin(idaapi.plugin_t):
 
 
 def PLUGIN_ENTRY():
-    return ImportStructsPlugin()
+    return San11StruPlugin()
 
 
 if __name__ == "__main__":
