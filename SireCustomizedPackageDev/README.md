@@ -29,11 +29,12 @@ Sire1.29 引进了自定义包（Sire Customized Package）的功能，以下为
   - [HexCopy](https://github.com/OALabs/hexcopy-ida)：IDA 插件，用于快速将反汇编代码复制为编码的十六进制字节
   - 此外，我自己在学习过程中也自己开发了一些 IDA 插件，推荐使用：
     - [hexpaste](https://github.com/sean2077/hexpaste-ida)：用于将Hex码快速拷贝进内存（原IDA里的change bytes一次只能替换16字节，拷贝自己修改的机械码太痛苦了）
-    - [jumptohex](https://github.com/sean2077/jumptohex-ida)：用于从 IDA View 跳转都 Hex View 对应位置
     - [big5-decode](https://github.com/sean2077/big5-decode-ida)：将字节以big5字符进行解码，结果添加为 repeatable comment ，支持批量（游戏内存里big5字符串都是存在一段连续的内存的，用这个插件可以迅速对各个字符串添加注释）
     - [make-word-dword](https://github.com/sean2077/make-word-dword-ida)：可以在IDA视图和Struct视图中通过快捷键创建 word 和 double word，这在标记数据或结构体时非常有用（原IDA中的快捷方式真是一言难尽，常用的功能不是缺少快捷键就是有快捷键但按键特别别扭）
-- Hex WorkShop：用于改.exe，暂时还没用到
+    - [311mem_tool](./ida-scripts/311mem_tool.py): san11pk内存地址记录工具，支持：内存地址汇总.md 中的记录导入到 IDA 中; IDA 中的内存地址记录导出到 内存地址汇总.md
+    - [311stru_tool](./ida-scripts/311stru_tool.py): san11pk结构体记录工具.
 - Cheat Engine：喜羊羊与RK都在用的动态调试神器，可以动态查看运行时的内存。暂时还没用到，因为目前的修改都比较简单。
+- Hex WorkShop：用于改.exe，暂时还没用到
 
 
 
@@ -68,7 +69,7 @@ Sire1.29 引进了自定义包（Sire Customized Package）的功能，以下为
 					<Address>004C8A9B</Address><!--长度:5-->
 					<EnableCode>B8 64 00 00 00</EnableCode>
 					<DisableCode>BE 64 00 00 00</DisableCode>
-				</Code>	
+				</Code>
 			</Codes>
 		</CustomModifyItem>
 	</CustomModifyItems>
@@ -171,19 +172,19 @@ B8 64 00 00 00  ; mov eax, 00000064
 					<Address>004C8EBC</Address><!--长度:4-->
 					<EnableCode>E0 01 95 00</EnableCode>
 					<DisableCode>6A 8A 4C 00</DisableCode>
-				</Code>	
+				</Code>
 				<Code>
 					<Description>代码</Description>
 					<Address>009501E0</Address><!--长度:40-->
 					<EnableCode>0F B6 05 D8 1A 20 07 8B 04 85 1C 1A 20 07 50 B9 58 19 20 07 E8 A7 08 B4 FF 8B 40 04 50 8B CF E8 7C 9D B3 FF 5E 5B 5F C3</EnableCode>
 					<DisableCode>00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00</DisableCode>
-				</Code>	
+				</Code>
 				<Code>
 					<Description>代码</Description>
 					<Address>007ECABC</Address><!--长度:6-->
 					<EnableCode>AC DB A9 CA AE 74</EnableCode>
 					<DisableCode>A5 40 A5 4E 00 00</DisableCode>
-				</Code>	
+				</Code>
 			</Codes>
 		</CustomModifyItem>
 ...
@@ -246,7 +247,7 @@ B8 64 00 00 00  ; mov eax, 00000064
 8B 04 85 1C 1A 20 07     mov     eax, dword ptr [eax*4 + 07201A1C]
 50                       push    eax
 B9 58 19 20 07           mov     ecx, 07201958
-E8 A7 08 B4 FF           call    00490AA0   ; Call to GetCountryPtr 
+E8 A7 08 B4 FF           call    00490AA0   ; Call to GetCountryPtr
 8B 40 04                 mov     eax, [eax+4]
 50                       push    eax
 8B CF                    mov     ecx, edi
@@ -258,30 +259,30 @@ C3                       retn
 ```
 
 1. **`movzx eax, byte ptr [07201AD8]`**
-   
+
    - `0F B6 05 D8 1A 20 07`：从地址 `07201AD8` 读取一个字节( 从后面的分析看，该字节应存储的是当前选定势力的序号)，并零扩展到 `eax`。
-   
+
 2. **`mov eax, dword ptr [eax*4 + 07201A1C]`**
    - `8B 04 85 1C 1A 20 07`：从地址 `07201A1C` 加上 `eax` * 4 的偏移处读取一个双字（4 字节）到 `eax`。
    - 这里地址`07201A1C`对应内容如下，表示一个长度为 `0CEh`（206 个字节）的字节数组，每个字节初始化为 `0`。`db` 表示定义字节（define byte），`0CEh` 是十六进制数 `206`，`dup(0)` 表示重复初始化为 `0`。
-   
+
    ![image-20240612163537728](./assets/image-20240612163537728.png)
-   
+
    - 这里的`07201A1C`应该是势力 ID 数组，在实际游戏时会为每个势力生成唯一ID。
    - PS：根据这里的限制，最大势力数应为 206/4=51 个？
-   
+
 3. **`push eax`**
-   
+
    - `50`：将 `eax` 的值压入栈中，即将势力 ID 作为下一个调用函数的第一个参数。
-   
+
 4. **`mov ecx, 07201958`**
    - `B9 58 19 20 07`：将立即数 `07201958` 加载到 `ecx`，这个数字是啥意思暂按下不表。
 
 5. **`call 00490AA0`**
-   
+
    - `E8 A7 08 B4 FF`：调用 `00490AA0` 处的函数，根据内存资料查得该函数功能为：根据势力ID获取势力指针。该函数详细讲解建后面，最后读到的势力指针存在 `eax` 寄存器 。
    - PS：这里补充下汇编的基础知识，在x86和x86-64架构中，`E8` 是一个短调用（short call）指令的操作码，用于调用相对于下一条指令的跳转偏移位置处的函数或子程序。这里下一条指令的地址是 009501F9，而 `E8 A7 08 B4 FF` 是小端序存储的偏移，实际偏移应为 FFB408A7, 则实际函数位置即 `009501F9 + FFB408A7 = 00490AA0`。
-   
+
 6. **`mov eax, [eax+4]`**
    - `8B 40 04`：将 `eax` 寄存器中地址加 4 的位置的值读取到 `eax`，从后面看，这个取得应该是该势力的君主的ID。
 
@@ -289,17 +290,17 @@ C3                       retn
    - `50`：将 `eax` 的值压入栈中，即将势力的君主ID作为下一个调用函数的第一个参数。
 
 8. **`mov ecx, edi`**
-   
+
    - `8B CF`：将 `edi` 的值加载到 `ecx`（从后面分析看，这里 `edi` 为当前武将的人物指针）。
-   
+
 9. **`call 00489F80`**
-   
+
    - `E8 7C 9D B3 FF`：调用 `00489F80` 处的函数, 根据内存资料查得该函数功能为：计算A与B的相性差(push B的ID, ecx=A的指针)，最后函数会往栈中推3个值，具体函数讲解见后面。
-   
+
 10. **`pop esi`**
-    
+
     - `5E`：从栈中弹出一个值到 `esi`。
-    
+
 11. **`pop ebx`**
     - `5B`：从栈中弹出一个值到 `ebx`。
 
@@ -365,9 +366,9 @@ C3                       retn
     - `ah`：`eax` 的高 8 位
     - `ax`：`eax` 的低 16 位
     - `eax`：整个 32 位寄存器
-    
+
     】
-    
+
 4. **有效参数处理**：
     ```assembly
     .text:00489F98 loc_489F98:                             ; CODE XREF: CalcXiangxingDiff+10↑j
@@ -383,15 +384,15 @@ C3                       retn
     将君主ID作为参数调用 `GetPersonPtr` 函数，获取君主的人物指针到 `esi`。然后调用 `IsLegalPtr` 检查指针合法性。
 
 5. **合法性检查**：
-   
+
     ```assembly
     .text:00489FAF                 test    eax, eax
     .text:00489FB1                 jz      short loc_489FD3
     ```
     如果指针不合法，跳转到 `loc_489FD3`。
-    
+
 6. **相性差异计算**：
-   
+
     ```assembly
     .text:00489FB3                 movzx   ecx, byte ptr [esi+69h]
     .text:00489FB7                 movzx   eax, byte ptr [edi+69h]
@@ -400,7 +401,7 @@ C3                       retn
     .text:00489FBF                 neg     eax
     ```
     获取 `esi` 和 `edi` 对象的69h偏移处的字节值，并计算它们的差值（绝对值）。
-    
+
 7. **相性差异与固定值对比**：
     ```assembly
     .text:00489FC1 loc_489FC1:                             ; CODE XREF: CalcXiangxingDiff+3D↑j
@@ -421,7 +422,7 @@ C3                       retn
     如果 `eax` 大于等于差值，返回较小的值。
 
 9. **非法指针处理和最终返回**：
-   
+
     ```assembly
     .text:00489FD3 loc_489FD3:                             ; CODE XREF: CalcXiangxingDiff+31↑j
     .text:00489FD3                 xor     al, al
@@ -434,7 +435,7 @@ C3                       retn
     .text:00489FD7
     .text:00489FD7 ; ---------------------------------------------------------------------------
 
-- `loc_489FD3` 和 `loc_489FD5` 处理函数在指针非法的情况下，将 `al` 清零（返回值为 0）。 
+- `loc_489FD3` 和 `loc_489FD5` 处理函数在指针非法的情况下，将 `al` 清零（返回值为 0）。
 - 恢复 `esi` 和 `edi` 寄存器的值。
 - `retn 4` 指令用于返回并清理函数调用时的堆栈参数。它会弹出 4 字节（1 个参数）的返回地址，并恢复执行上下文。
 
@@ -796,7 +797,7 @@ print(f"Memory range from {hex(start_address)} to {hex(end_address)} saved to {o
 
 ![image-20240615152824408](./assets/image-20240615152824408.png)
 
-查内存资料，可知上述调用的几个函数分别为： 
+查内存资料，可知上述调用的几个函数分别为：
 
 - 00491770 根据设施指针获取设施ID
 - 00490a10 根据城市ID获取城市指针

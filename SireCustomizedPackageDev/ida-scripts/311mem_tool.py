@@ -1,9 +1,9 @@
-#!python
 """
 san11pk内存地址记录工具，支持：
 - 内存地址汇总.md 中的记录导入到 IDA 中
 - IDA 中的内存地址记录导出到 内存地址汇总.md
 """
+
 import os
 import re
 from dataclasses import dataclass, field
@@ -14,6 +14,7 @@ import idc
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
+MEM_RECORDS_FILE = os.path.join(os.path.dirname(SCRIPT_DIR), "material", "内存地址汇总.md")
 
 ##########################################################################
 ###                               Utils                                ###
@@ -62,9 +63,6 @@ def _get_data_flags_size(dt_str: str) -> tuple[int, int]:
 ##########################################################################
 ###                           内存地址记录相关                            ###
 ##########################################################################
-
-
-MEM_RECORDS_FILE = os.path.join(os.path.dirname(SCRIPT_DIR), "material", "内存地址汇总.md")
 
 
 @dataclass
