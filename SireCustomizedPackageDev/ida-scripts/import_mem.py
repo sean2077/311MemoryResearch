@@ -99,8 +99,9 @@ class Record:
         return ret
 
 
-def collect_records(file_path: str = MEM_RECORDS_FILE) -> list[Record]:
+def collect_records(file_path: str = MEM_RECORDS_FILE) -> tuple[list[Record], dict[int, int]]:
     records = []
+    record_addr_idx_map = {}
     name_set = set()
 
     with open(file_path, "r", encoding="utf-8") as f:
@@ -122,8 +123,9 @@ def collect_records(file_path: str = MEM_RECORDS_FILE) -> list[Record]:
                         record.name += f"_{record.address:x}"
                     name_set.add(record.name)
                 records.append(record)
+                record_addr_idx_map[record.address] = len(records) - 1
 
-    return records
+    return records, record_addr_idx_map
 
 
 def save_records(records: list[Record], dest_file: str = MEM_RECORDS_FILE):
@@ -141,132 +143,167 @@ def import_records(records_file: str):
     idaapi.msg("-" * 50 + "\n")
     idaapi.msg(f"Importing records from {records_file}...\n")
 
-    records = collect_records(records_file)
+    records, addr2idx = collect_records(records_file)
+
+    added_records = []  # 载入过程中新增的内存记录
 
     for record in records:
+        match (record.type):
 
-        # 1. 如果为函数开头地址，更新函数名称和注释
-        func = idaapi.get_func(record.address)
-        if func and func.start_ea == record.address:
-            idaapi.set_name(record.address, record.name)
-            idaapi.set_func_cmt(record.address, record.comment, True)
-            idaapi.msg(f"Function at {record.address:x} name updated to {record.name}.\n")
-            continue
+            case "函数":  # 1. 如果为函数开头地址，更新函数名称和注释
+                func = idaapi.get_func(record.address)
+                if func and func.start_ea == record.address:
+                    idaapi.set_name(record.address, record.name)
+                    idaapi.set_func_cmt(record.address, record.comment, True)
+                    idaapi.msg(f"Function at {record.address:x} name updated to {record.name}.\n")
 
-        # 2. 如果为参数
-        if record.type in ["参数"]:
-            param_type = record._info.get("type", None)
-            if not param_type:
-                idaapi.msg(f"Parameter at {record.address:x} has no type info. Skipped.\n")
-                continue
-
-            dt_flag, dt_sz = _get_data_flags_size(param_type)
-            if dt_sz == -1:
-                idaapi.warning(f"Unsupported data type: {param_type}. Skipped.\n")
-                continue
-
-            if param_type.startswith("struct_"):
-                tid = idaapi.get_struc_id(param_type)
-                if not idaapi.create_struct(record.address, dt_sz, tid):
-                    idaapi.warning(f"Failed to create struct {param_type} at {record.address:x}.\n")
-                    continue
-            else:
-                if not idaapi.create_data(record.address, dt_flag, dt_sz, idaapi.BADNODE):
-                    idaapi.warning(f"Failed to create data type {param_type} at {record.address:x}.\n")
+            case "参数":  # 2. 如果为参数，创建数据
+                param_type = record._info.get("type", None)
+                if not param_type:
+                    idaapi.msg(f"Parameter at {record.address:x} has no type info. Skipped.\n")
                     continue
 
-            idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
-            idaapi.set_cmt(record.address, record.comment, True)
-            idaapi.msg(f"Parameter at {record.address:x} created, named to {record.name}.\n")
-            continue
-
-        # 3. 如果为数表，创建数组
-        if record.type in ["数表"]:
-            table_type = record._info.get("type", None)  # data_type[array_size]
-            if not table_type:
-                idaapi.msg(f"Table at {record.address:x} has no type info. Skipped.\n")
-                continue
-
-            # 解析 data_type 和 array_size
-            pattern = r"(\w+)\[(\d+)\]"
-            match = re.match(pattern, table_type)
-            if not match:
-                idaapi.msg(f"Invalid table type: {table_type}. Skipped.\n")
-                continue
-            dt_str, array_size = match.groups()
-            array_size = int(array_size)
-            dt_flag, dt_sz = _get_data_flags_size(dt_str)
-            if dt_sz == -1:
-                idaapi.warning(f"Unsupported data type: {dt_str}. Skipped.\n")
-                continue
-
-            # 去掉原有定义
-            idaapi.del_items(record.address, idaapi.DELIT_SIMPLE, array_size * dt_sz)
-
-            # 首先定义 record.address 处的数据结构
-            is_struct_array = dt_str.startswith("struct_")
-            if is_struct_array:  # 结构体数组
-                tid = idaapi.get_struc_id(dt_str)
-                if not idaapi.create_struct(record.address, dt_sz, tid):
-                    idaapi.warning(f"Failed to create struct {dt_str} at {record.address:x}.\n")
-                    continue
-            else:
-                if not idaapi.create_data(record.address, dt_flag, dt_sz, idaapi.BADNODE):
-                    idaapi.warning(f"Failed to create data type {dt_str} at {record.address:x}.\n")
+                dt_flag, dt_sz = _get_data_flags_size(param_type)
+                if dt_sz == -1:
+                    idaapi.warning(f"Unsupported data type: {param_type}. Skipped.\n")
                     continue
 
-            # 创建数组
-            need_create_array = (array_size <= 100 or array_size * dt_sz < 0x1000) and (
-                record._info.get("no_array", "0") != "1"
-            )
-            if need_create_array:  # 创建数组作为一个整体
-                if not idc.make_array(record.address, array_size):
-                    idaapi.warning(f"Failed to create array at {record.address:x}.\n")
-                    continue
-                # 设置数组参数
-                ap = idaapi.array_parameters_t()
-                ap.flags = idaapi.AP_INDEX
-                if record._info.get("no_array", None) != "1":
-                    ap.flags |= idaapi.AP_ARRAY  # 默认 create_array
-                if record._info.get("idxhex", None) != "1":
-                    ap.flags |= idaapi.AP_IDXDEC  # 默认十进制
+                if param_type.startswith("struct_"):
+                    tid = idaapi.get_struc_id(param_type)
+                    if not idaapi.create_struct(record.address, dt_sz, tid):
+                        idaapi.warning(f"Failed to create struct {param_type} at {record.address:x}.\n")
+                        continue
                 else:
-                    ap.flags |= idaapi.AP_IDXHEX
-                ap.lineitems = 0 if is_struct_array else 1
-                if record._info.get("lineitems", None):
-                    ap.lineitems = int(record._info["lineitems"])
-                idaapi.set_array_parameters(record.address, ap)
-            else:  # 逐个创建数组元素
-                for i in range(1, array_size):
-                    if is_struct_array:
-                        if not idaapi.create_struct(record.address + i * dt_sz, tid):
-                            idaapi.warning(f"Failed to create struct {dt_str} at {record.address + i * dt_sz:x}.\n")
-                            continue
+                    if not idaapi.create_data(record.address, dt_flag, dt_sz, idaapi.BADNODE):
+                        idaapi.warning(f"Failed to create data type {param_type} at {record.address:x}.\n")
+                        continue
+
+                idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
+                idaapi.set_cmt(record.address, record.comment, True)
+                idaapi.msg(f"Parameter at {record.address:x} created, named to {record.name}.\n")
+
+            case "数表":  # 3. 如果为数表，创建数组
+                table_type = record._info.get("type", None)  # data_type[array_size]
+                if not table_type:
+                    idaapi.msg(f"Table at {record.address:x} has no type info. Skipped.\n")
+                    continue
+
+                # 解析 data_type 和 array_size
+                pattern = r"(\w+)\[(\d+)\]"
+                match = re.match(pattern, table_type)
+                if not match:
+                    idaapi.msg(f"Invalid table type: {table_type}. Skipped.\n")
+                    continue
+                dt_str, array_size = match.groups()
+                array_size = int(array_size)
+                dt_flag, dt_sz = _get_data_flags_size(dt_str)
+                if dt_sz == -1:
+                    idaapi.warning(f"Unsupported data type: {dt_str}. Skipped.\n")
+                    continue
+
+                # 去掉原有定义
+                idaapi.del_items(record.address, idaapi.DELIT_SIMPLE, array_size * dt_sz)
+
+                # 首先定义 record.address 处的数据结构
+                is_struct_array = dt_str.startswith("struct_")
+                if is_struct_array:  # 结构体数组
+                    tid = idaapi.get_struc_id(dt_str)
+                    if not idaapi.create_struct(record.address, dt_sz, tid):
+                        idaapi.warning(f"Failed to create struct {dt_str} at {record.address:x}.\n")
+                        continue
+                else:
+                    if not idaapi.create_data(record.address, dt_flag, dt_sz, idaapi.BADNODE):
+                        idaapi.warning(f"Failed to create data type {dt_str} at {record.address:x}.\n")
+                        continue
+
+                # 创建数组
+                need_create_array = (array_size <= 100 or array_size * dt_sz < 0x1000) and (
+                    record._info.get("no_array", "0") != "1"
+                )
+                if need_create_array:  # 创建数组作为一个整体
+                    if not idc.make_array(record.address, array_size):
+                        idaapi.warning(f"Failed to create array at {record.address:x}.\n")
+                        continue
+                    # 设置数组参数
+                    ap = idaapi.array_parameters_t()
+                    ap.flags = idaapi.AP_INDEX
+                    if record._info.get("no_array", None) != "1":
+                        ap.flags |= idaapi.AP_ARRAY  # 默认 create_array
+                    if record._info.get("idxhex", None) != "1":
+                        ap.flags |= idaapi.AP_IDXDEC  # 默认十进制
                     else:
-                        if not idc.create_data(record.address + i * dt_sz, dt_flag, dt_sz, idaapi.BADNODE):
-                            idaapi.warning(f"Failed to create data type {dt_str} at {record.address + i * dt_sz:x}.\n")
-                            continue
-                    idaapi.set_cmt(record.address + i * dt_sz, f"{record.name}[{i}]", True)
+                        ap.flags |= idaapi.AP_IDXHEX
+                    ap.lineitems = 0 if is_struct_array else 1
+                    if record._info.get("lineitems", None):
+                        ap.lineitems = int(record._info["lineitems"])
+                    idaapi.set_array_parameters(record.address, ap)
+                else:  # 逐个创建数组元素
+                    for i in range(1, array_size):
+                        addr = record.address + i * dt_sz
+                        if is_struct_array:
+                            if not idaapi.create_struct(addr, tid):
+                                idaapi.warning(f"Failed to create struct {dt_str} at {addr:x}.\n")
+                                continue
+                        else:
+                            if not idc.create_data(addr, dt_flag, dt_sz, idaapi.BADNODE):
+                                idaapi.warning(f"Failed to create data type {dt_str} at {addr:x}.\n")
+                                continue
+                        if record._info.get("no_array", None) != "1":
+                            idaapi.set_cmt(addr, f"{record.name}[{i}]", True)
+                        else:
+                            idaapi.set_cmt(addr, "", True)  # 不视作整体数组，则每个元素的 repeatable comment 不应被覆盖
+                            if dt_str == "address":
+                                # 对数组元素的注释进行处理
+                                dst_addr = idaapi.get_wide_dword(addr)
+                                dst_func = idaapi.get_func(dst_addr)
+                                if dst_func and dst_func.start_ea == dst_addr:  # 函数首地址
+                                    dst_comment = idaapi.get_func_cmt(dst_func, True) or ""
+                                    add_comment = f"[{record.name}+{4*i:x}]"
+                                    if add_comment not in dst_comment:
+                                        dst_comment += " " + add_comment
+                                        idaapi.set_func_cmt(dst_addr, dst_comment, True)
+                                    # 更新函数记录
+                                    if dst_addr in addr2idx:
+                                        dst_record = records[addr2idx[dst_addr]]
+                                        dst_record.comment = dst_comment
+                                    else:
+                                        new_record = Record(dst_addr, "函数", tags=record.tags, comment=dst_comment)
+                                        added_records.append(new_record)
+                                else:
+                                    dst_comment = idaapi.get_cmt(dst_addr, True) or ""
+                                    add_comment = f"[{record.name}+{4*i:x}]"
+                                    if add_comment not in dst_comment:
+                                        dst_comment += " " + add_comment
+                                        idaapi.set_cmt(dst_addr, dst_comment, True)
+                                    # 更新地址记录
+                                    if dst_addr in addr2idx:
+                                        dst_record = records[addr2idx[dst_addr]]
+                                        dst_record.comment = dst_comment
+                                    else:
+                                        new_record = Record(dst_addr, "地址", tags=record.tags, comment=dst_comment)
+                                        added_records.append(new_record)
 
-            # 补充数组信息
-            array_detail = f"[end={record.address+dt_sz*array_size:x},size={array_size},item_size={dt_sz:#x}]"
-            if not record.comment.startswith(array_detail):
-                record.comment = array_detail + " " + record.comment
+                # 补充数组信息
+                array_detail = f"[end={record.address+dt_sz*array_size:x},size={array_size},item_size={dt_sz:#x}]"
+                if not record.comment.startswith(array_detail):
+                    record.comment = array_detail + " " + record.comment
 
-            idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
-            idaapi.set_cmt(record.address, record.comment, True)
-            idaapi.msg(f"Table at {record.address:x} created, size: {array_size}, named to {record.name}.\n")
-            continue
+                idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
+                idaapi.set_cmt(record.address, record.comment, True)
+                idaapi.msg(f"Table at {record.address:x} created, size: {array_size}, named to {record.name}.\n")
 
-        # 其他情况，更新地址名称和注释
-        idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
-        idaapi.set_cmt(record.address, record.comment, True)
-        idaapi.msg(f"Address at {record.address:x} name updated to {record.name}.\n")
+            case _:  # 其他情况，更新地址名称和注释
+                idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
+                idaapi.set_cmt(record.address, record.comment, True)
+                idaapi.msg(f"Address at {record.address:x} name updated to {record.name}.\n")
 
     # 刷新 IDA 视图和 反编译视图
     window_refresh_flags = idaapi.IWID_DISASM | idaapi.IWID_PSEUDOCODE
     idaapi.request_refresh(window_refresh_flags)
     idaapi.refresh_idaview()
+
+    # 加入新增的记录
+    records.extend(added_records)
 
     # 按(类别，标签，地址)排序
     records.sort(key=lambda x: x.address)

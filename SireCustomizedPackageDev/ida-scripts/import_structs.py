@@ -233,12 +233,12 @@ class Struct:
 
 def _find_struct_array_size(start_addr, struct_size):
     # 首先找到 start_addr 处的双字地址，这是每个结构体的标识
-    func_addr = idaapi.get_32bit(start_addr)
+    func_addr = idaapi.get_wide_dword(start_addr)
 
     cur_addr = start_addr + struct_size
     item_cnt = 1
     while True:
-        cur_func_addr = idaapi.get_32bit(cur_addr)
+        cur_func_addr = idaapi.get_wide_dword(cur_addr)
         if cur_func_addr != func_addr:
             break
         item_cnt += 1
@@ -322,7 +322,7 @@ def import_struct(struct: Struct):
 
                 # 更新结构体相关函数所在地址名称
                 func_addr_name = struct.fields[0].name.removeprefix("fld_0_")
-                func_addr = idaapi.get_32bit(array_start_addr)
+                func_addr = idaapi.get_wide_dword(array_start_addr)
                 idaapi.set_name(func_addr, func_addr_name)
 
             # 创建结构体数组
