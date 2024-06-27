@@ -52,7 +52,7 @@ def ask_file_paths() -> list[str]:
 @dataclass
 class StructField:
     offset: int
-    size: int
+    size: int  # 字段大小
     data_type: str
     name: str
     comment: str
@@ -92,7 +92,7 @@ class StructField:
 
 def _get_data_flags(fld: StructField):
     dt_str = fld.data_type
-    if "[" in dt_str:
+    if "[" in dt_str:  # 数组取元素类型
         dt_str = dt_str.split("[")[0]
 
     if dt_str in ("byte", "bit"):
