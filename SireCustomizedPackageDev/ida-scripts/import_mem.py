@@ -86,7 +86,7 @@ class Record:
         name = name.strip()
         tags = tags.strip()
         tags = list(tags.strip().split(",")) if tags else []
-        comment = comment.strip()
+        comment = comment.strip().replace("\\n", "\n")
         ret = cls(address, type_, name, tags, comment)
 
         # 附加信息
@@ -134,8 +134,10 @@ def save_records(records: list[Record], dest_file: str = MEM_RECORDS_FILE):
         f.write("| ---- | ---- | ---- | ---- | ---- | ---- |\n")
         for record in records:
             info = ",".join([f"{k}={v}" for k, v in record._info.items()])
+            # 对 record.comment 中的换行符进行转义
+            comment = record.comment.replace("\n", "\\n")
             f.write(
-                f"| {record.address:08x} | {record.type} | {record.name} | {','.join(record.tags)} | {record.comment} | {info} |\n"
+                f"| {record.address:08x} | {record.type} | {record.name} | {','.join(record.tags)} | {comment} | {info} |\n"
             )
 
 
@@ -190,11 +192,11 @@ def import_records(records_file: str):
 
                 # 解析 data_type 和 array_size
                 pattern = r"(\w+)\[(\d+)\]"
-                match = re.match(pattern, table_type)
-                if not match:
+                m = re.match(pattern, table_type)
+                if not m:
                     idaapi.msg(f"Invalid table type: {table_type}. Skipped.\n")
                     continue
-                dt_str, array_size = match.groups()
+                dt_str, array_size = m.groups()
                 array_size = int(array_size)
                 dt_flag, dt_sz = _get_data_flags_size(dt_str)
                 if dt_sz == -1:
@@ -217,18 +219,16 @@ def import_records(records_file: str):
                         continue
 
                 # 创建数组
-                need_create_array = (array_size <= 100 or array_size * dt_sz < 0x1000) and (
-                    record._info.get("no_array", "0") != "1"
-                )
-                if need_create_array:  # 创建数组作为一个整体
+                is_small_array = array_size <= 100 or array_size * dt_sz < 0x1000  # 小数组
+                no_array = record._info.get("no_array", "0") == "1"  # 不作为一个整体创建数组
+                need_create_array = not no_array and is_small_array
+                if need_create_array:  # 作为一个整体创建数组
                     if not idc.make_array(record.address, array_size):
                         idaapi.warning(f"Failed to create array at {record.address:x}.\n")
                         continue
                     # 设置数组参数
                     ap = idaapi.array_parameters_t()
-                    ap.flags = idaapi.AP_INDEX
-                    if record._info.get("no_array", None) != "1":
-                        ap.flags |= idaapi.AP_ARRAY  # 默认 create_array
+                    ap.flags = idaapi.AP_INDEX | idaapi.AP_ARRAY
                     if record._info.get("idxhex", None) != "1":
                         ap.flags |= idaapi.AP_IDXDEC  # 默认十进制
                     else:
@@ -253,7 +253,7 @@ def import_records(records_file: str):
                         else:
                             idaapi.set_cmt(addr, "", True)  # 不视作整体数组，则每个元素的 repeatable comment 不应被覆盖
                             if dt_str == "address":
-                                # 对数组元素的注释进行处理
+                                # 对地址数组的元素的注释进行处理
                                 dst_addr = idaapi.get_wide_dword(addr)
                                 dst_func = idaapi.get_func(dst_addr)
                                 if dst_func and dst_func.start_ea == dst_addr:  # 函数首地址
