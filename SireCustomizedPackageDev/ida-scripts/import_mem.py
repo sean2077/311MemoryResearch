@@ -246,6 +246,7 @@ def import_records(records_file: str):
                         if not idc.create_data(record.address + i * dt_sz, dt_flag, dt_sz, idaapi.BADNODE):
                             idaapi.warning(f"Failed to create data type {dt_str} at {record.address + i * dt_sz:x}.\n")
                             continue
+                    idaapi.set_cmt(record.address + i * dt_sz, f"{record.name}[{i}]", True)
 
             # 补充数组信息
             array_detail = f"[end={record.address+dt_sz*array_size:x},size={array_size},item_size={dt_sz:#x}]"

@@ -294,6 +294,7 @@ def import_struct(struct: Struct):
         idaapi.warning(f"Struct size mismatch: {struct.size:X} vs {struct_size:X}\n")
 
     # IDA 视图中创建结构体数组
+    # struct.array_updated = False
     if not struct.array_updated and len(struct.array_start_addrs) > 0:
         struct.array_updated = True
         for i, array_start_addr in enumerate(struct.array_start_addrs):
@@ -335,8 +336,12 @@ def import_struct(struct: Struct):
                 ap.flags = idaapi.AP_INDEX | idaapi.AP_IDXDEC | idaapi.AP_ARRAY
                 idaapi.set_array_parameters(array_start_addr, ap)
             else:  # 大数组
+                cnt = 0
                 for addr in range(array_start_addr, array_end_addr, struct.size):
                     idaapi.create_struct(addr, struct.size, tid)
+                    if cnt > 0:
+                        idaapi.set_cmt(addr, f"{struct.name}_ARRAY[{cnt}]", 1)
+                    cnt += 1
 
             # 结构体数组名和注释
             array_name = f"{struct.name}_ARRAY"
