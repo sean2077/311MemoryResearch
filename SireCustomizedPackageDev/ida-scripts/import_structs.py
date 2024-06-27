@@ -90,21 +90,33 @@ class StructField:
         return self._is_bit
 
 
-def _get_data_type(fld: StructField):
+def _get_data_flags(fld: StructField):
     dt_str = fld.data_type
     if "[" in dt_str:
         dt_str = dt_str.split("[")[0]
 
     if dt_str in ("byte", "bit"):
-        return idaapi.FF_BYTE
+        return idaapi.byte_flag()
 
     if dt_str in ("word", "short"):
-        return idaapi.FF_WORD
+        return idaapi.word_flag()
 
-    if dt_str in ("dword", "int", "pointer32"):
-        return idaapi.FF_DWORD
+    if dt_str in ("dword", "int"):
+        return idaapi.dword_flag()
 
-    return idaapi.FF_BYTE
+    if dt_str in ("float",):
+        return idaapi.float_flag()
+
+    if dt_str in ("pointer32", "pointer", "address"):
+        return idaapi.FF_DWORD | idaapi.FF_1OFF | idaapi.FF_DATA
+
+    if dt_str in ("string",):
+        return idaapi.strlit_flag()
+
+    if dt_str.startswith("struct_"):
+        return idaapi.stru_flag()
+
+    return idaapi.get_flags_by_size(fld.size)
 
 
 @dataclass
@@ -267,7 +279,7 @@ def import_struct(struct: Struct):
             if mptr != idaapi.BADADDR:
                 idaapi.del_struc_member(sptr, field.offset)
 
-        dt = _get_data_type(field)
+        dt = _get_data_flags(field)
         idaapi.add_struc_member(sptr, field.name, field.offset, dt, None, field.size)
         mptr = idaapi.get_member(sptr, field.offset)
         idaapi.set_member_cmt(mptr, field.comment, 1)
