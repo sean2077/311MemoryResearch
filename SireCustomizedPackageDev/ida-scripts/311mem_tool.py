@@ -61,6 +61,11 @@ def _get_data_flags_size(dt_str: str) -> tuple[int, int]:
     return 0, -1  # 不支持类型
 
 
+def is_auto_generated_name(name: str):
+    auto_prefixes = ["sub_", "loc_", "j_"]
+    return any(name.startswith(prefix) for prefix in auto_prefixes)
+
+
 ##########################################################################
 ###                           内存地址记录相关                            ###
 ##########################################################################
@@ -134,7 +139,9 @@ def save_records(records: list[Record], dest_file: str = MEM_RECORDS_FILE):
     rows = []
     for record in records:
         info = ",".join([f"{k}={v}" for k, v in record._info.items()])
-        comment = record.comment.replace("\n", "\\n")
+        comment = record.comment
+        if comment:
+            comment = comment.replace("\n", "\\n")
         rows.append((f"{record.address:08x}", record.type, record.name, ",".join(record.tags), comment, info))
 
     tb = PrettyTable()
@@ -156,9 +163,8 @@ def import_records(records_file: str):
 
     records, addr2idx = collect_records(records_file)
 
-    added_records = []  # 载入过程中新增的内存记录
-
-    for record in records:
+    for record_index in range(len(records)):
+        record = records[record_index]
         match (record.type):
 
             case "函数":  # 1. 如果为函数开头地址，更新函数名称和注释
@@ -260,8 +266,8 @@ def import_records(records_file: str):
                         if record._info.get("no_array", None) != "1":
                             idaapi.set_cmt(addr, f"{record.name}[{i}]", True)
                         else:
-                            idaapi.set_cmt(addr, "", True)  # 不视作整体数组，则每个元素的 repeatable comment 不应被覆盖
                             if dt_str == "address":
+                                idaapi.set_cmt(addr, "", True)  # 不视作整体数组，则每个元素的 repeatable comment 不应被覆盖
                                 # 对地址数组的元素的注释进行处理
                                 dst_addr = idaapi.get_wide_dword(addr)
                                 dst_func = idaapi.get_func(dst_addr)
@@ -277,7 +283,8 @@ def import_records(records_file: str):
                                         dst_record.comment = dst_comment
                                     else:
                                         new_record = Record(dst_addr, "函数", tags=record.tags, comment=dst_comment)
-                                        added_records.append(new_record)
+                                        records.append(new_record)
+                                        addr2idx[dst_addr] = len(records) - 1
                                 else:
                                     dst_comment = idaapi.get_cmt(dst_addr, True) or ""
                                     add_comment = f"[{record.name}+{4*i:x}]"
@@ -290,7 +297,8 @@ def import_records(records_file: str):
                                         dst_record.comment = dst_comment
                                     else:
                                         new_record = Record(dst_addr, "地址", tags=record.tags, comment=dst_comment)
-                                        added_records.append(new_record)
+                                        records.append(new_record)
+                                        addr2idx[dst_addr] = len(records) - 1
 
                 # 补充数组信息
                 array_detail = f"[end={record.address+dt_sz*array_size:x},size={array_size},item_size={dt_sz:#x}]"
@@ -311,9 +319,6 @@ def import_records(records_file: str):
     idaapi.request_refresh(window_refresh_flags)
     idaapi.refresh_idaview()
 
-    # 加入新增的记录
-    records.extend(added_records)
-
     # 按(类别，标签，地址)排序
     records.sort(key=lambda x: x.address)
     records.sort(key=lambda x: tuple(x.tags), reverse=True)
@@ -325,6 +330,7 @@ def import_records(records_file: str):
     for record in records:
         if record.address in addr_set:
             duplicate_records.append(record)
+            # records.remove(record)
         addr_set.add(record.address)
     idaapi.msg(f"Found {len(duplicate_records)} duplicate records.\n")
     for record in duplicate_records:
@@ -352,11 +358,15 @@ def export_records(records_file: str):
             case "函数":
                 func = idaapi.get_func(record.address)
                 if func and func.start_ea == record.address:
-                    record.name = idaapi.get_func_name(record.address)
-                    record.comment = idaapi.get_func_cmt(record.address, True)
+                    name = idaapi.get_func_name(record.address)
+                    if not is_auto_generated_name(name):
+                        record.name = name
+                    record.comment = idaapi.get_func_cmt(record.address, True) or ""
             case _:
-                record.name = idaapi.get_name(record.address)
-                record.comment = idaapi.get_cmt(record.address, True)
+                name = idaapi.get_name(record.address)
+                if not is_auto_generated_name(name):
+                    record.name = name
+                record.comment = idaapi.get_cmt(record.address, True) or ""
 
     # 保存记录
     save_records(records, records_file)
