@@ -187,7 +187,7 @@ class Struct:
                         array_updated = line.split(":")[-1].strip().lower() in ("true", "1")
                     continue
                 # 处理字段行
-                if not field_line_started and line.startswith("| ---"):
+                if not field_line_started and any(line.startswith(x) for x in ("| ---", "|--", "| :--", "|:--")):
                     field_line_started = True
                     continue
                 if field_line_started:

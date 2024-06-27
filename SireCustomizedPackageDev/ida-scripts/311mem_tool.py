@@ -11,6 +11,7 @@ from datetime import datetime
 
 import idaapi
 import idc
+from prettytable import MARKDOWN, PrettyTable
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -111,7 +112,7 @@ def collect_records(file_path: str = MEM_RECORDS_FILE) -> tuple[list[Record], di
             if not line:
                 continue
             if not reach_records:
-                if line.startswith("| ---") or line.startswith("|--"):
+                if any(line.startswith(x) for x in ("| ---", "|--", "| :--", "|:--")):
                     reach_records = True
                 continue
             if reach_records:
@@ -129,19 +130,27 @@ def collect_records(file_path: str = MEM_RECORDS_FILE) -> tuple[list[Record], di
 
 
 def save_records(records: list[Record], dest_file: str = MEM_RECORDS_FILE):
+    headers = ("地址", "类型", "名称", "标签", "注释", "附加信息")
+    rows = []
+    for record in records:
+        info = ",".join([f"{k}={v}" for k, v in record._info.items()])
+        comment = record.comment.replace("\n", "\\n")
+        rows.append((f"{record.address:08x}", record.type, record.name, ",".join(record.tags), comment, info))
+
+    tb = PrettyTable()
+    tb.set_style(MARKDOWN)
+    tb.align = "l"
+    tb.field_names = headers
+    for row in rows:
+        tb.add_row(row)
+
     with open(dest_file, "w", encoding="utf-8") as f:
-        f.write("| 地址 | 类型 | 名称 | 标签 | 注释 | 附加信息 | \n")
-        f.write("| ---- | ---- | ---- | ---- | ---- | ---- |\n")
-        for record in records:
-            info = ",".join([f"{k}={v}" for k, v in record._info.items()])
-            # 对 record.comment 中的换行符进行转义
-            comment = record.comment.replace("\n", "\\n")
-            f.write(
-                f"| {record.address:08x} | {record.type} | {record.name} | {','.join(record.tags)} | {comment} | {info} |\n"
-            )
+        f.write(tb.get_string())
 
 
 def import_records(records_file: str):
+    """读取 records_file 中的记录，导入到 IDA 中, 并将更新的信息保存到 records_file 中"""
+
     idaapi.msg("-" * 50 + "\n")
     idaapi.msg(f"Importing records from {records_file}...\n")
 
@@ -326,10 +335,46 @@ def import_records(records_file: str):
 
     idaapi.msg(f"Records imported from {records_file}.\n")
     idaapi.msg("Done.\n")
+    idaapi.msg("-" * 50 + "\n")
+
+
+def export_records(records_file: str):
+    """读取 IDA 中已知内存地址记录的名称和注释等信息，导出到 records_file 中"""
+
+    idaapi.msg("-" * 50 + "\n")
+    idaapi.msg(f"Exporting records to {records_file}...\n")
+
+    # 读取记录
+    records, addr2idx = collect_records(records_file)
+
+    for record in records:
+        match (record.type):
+            case "函数":
+                func = idaapi.get_func(record.address)
+                if func and func.start_ea == record.address:
+                    record.name = idaapi.get_func_name(record.address)
+                    record.comment = idaapi.get_func_cmt(record.address, True)
+            case _:
+                record.name = idaapi.get_name(record.address)
+                record.comment = idaapi.get_cmt(record.address, True)
+
+    # 保存记录
+    save_records(records, records_file)
+
+    idaapi.msg("Records exported to {records_file}.\n")
+    idaapi.msg("Done.\n")
+    idaapi.msg("-" * 50 + "\n")
 
 
 def action():
-    import_records(MEM_RECORDS_FILE)
+    # 交互式选择导入或导出
+    button = idaapi.ask_buttons("Import", "Export", "Cancel", 1, "Import or export memory records")
+    if button == 1:
+        import_records(MEM_RECORDS_FILE)
+    elif button == 0:
+        export_records(MEM_RECORDS_FILE)
+    else:
+        idaapi.msg("Canceled.\n")
 
 
 ##########################################################################
