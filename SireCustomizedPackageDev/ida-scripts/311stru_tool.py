@@ -279,12 +279,21 @@ def import_struct(struct: Struct):
     for field in struct.fields:
         if is_update:
             # delete the existing member
-            mptr = idaapi.get_member(sptr, field.offset)
-            if mptr != idaapi.BADADDR:
-                idaapi.del_struc_member(sptr, field.offset)
+            idaapi.del_struc_members(sptr, field.offset, field.offset + field.size)
 
-        dt = _get_data_flags(field)
-        idaapi.add_struc_member(sptr, field.name, field.offset, dt, None, field.size)
+        if field.data_type.startswith("struct_"):
+            # 如果是结构体类型，则先创建结构体
+            sub_struct_name = field.data_type
+            sub_struct_name = sub_struct_name.split("[")[0]
+            opinfo = idaapi.opinfo_t()
+            opinfo.tid = idaapi.get_struc_id(sub_struct_name)
+            if opinfo.tid == idaapi.BADADDR:
+                idaapi.msg(f"Struct {sub_struct_name} not found.\n")
+                continue
+            idaapi.add_struc_member(sptr, field.name, field.offset, idaapi.stru_flag(), opinfo, field.size)
+        else:
+            dt = _get_data_flags(field)
+            idaapi.add_struc_member(sptr, field.name, field.offset, dt, None, field.size)
         mptr = idaapi.get_member(sptr, field.offset)
         idaapi.set_member_cmt(mptr, field.comment, 1)
 
