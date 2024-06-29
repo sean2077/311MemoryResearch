@@ -291,6 +291,10 @@ def import_struct(struct: Struct):
                 idaapi.msg(f"Struct {sub_struct_name} not found.\n")
                 continue
             idaapi.add_struc_member(sptr, field.name, field.offset, idaapi.stru_flag(), opinfo, field.size)
+        elif field.data_type == "string":
+            opinfo = idaapi.opinfo_t()
+            opinfo.strtype = idaapi.STRTYPE_C_32
+            idaapi.add_struc_member(sptr, field.name, field.offset, idaapi.strlit_flag(), opinfo, field.size)
         else:
             dt = _get_data_flags(field)
             idaapi.add_struc_member(sptr, field.name, field.offset, dt, None, field.size)
