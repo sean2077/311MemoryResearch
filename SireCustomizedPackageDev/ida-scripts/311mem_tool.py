@@ -33,7 +33,7 @@ def format_address(addr: int) -> str:
     return f"{addr:08x}"
 
 
-def _get_data_flags_size(dt_str: str) -> tuple[int, int]:
+def get_data_flags_size(dt_str: str) -> tuple[int, int]:
     if dt_str in ("byte",):
         return idaapi.byte_flag(), 1
 
@@ -64,6 +64,11 @@ def _get_data_flags_size(dt_str: str) -> tuple[int, int]:
 def is_auto_generated_name(name: str):
     auto_prefixes = ["sub_", "loc_", "j_"]
     return any(name.startswith(prefix) for prefix in auto_prefixes)
+
+
+def reach_table_start(line: str) -> bool:
+    """判断是否到达表格内容开始行"""
+    return any(line.startswith(x) for x in ("| ---", "|--", "| :--", "|:--"))
 
 
 ##########################################################################
@@ -115,9 +120,11 @@ def collect_records(file_path: str = MEM_RECORDS_FILE) -> tuple[list[Record], di
         for line in f:
             line = line.strip()
             if not line:
+                if reach_records:  # 读取到记录后的空行，结束
+                    break
                 continue
             if not reach_records:
-                if any(line.startswith(x) for x in ("| ---", "|--", "| :--", "|:--")):
+                if reach_table_start(line):
                     reach_records = True
                 continue
             if reach_records:
@@ -151,7 +158,17 @@ def save_records(records: list[Record], dest_file: str = MEM_RECORDS_FILE):
     for row in rows:
         tb.add_row(row)
 
+    # 先找出表格前的内容
+    headers = []
+    with open(dest_file, "r", encoding="utf-8") as f:
+        for line in f:
+            if reach_table_start(line):
+                break
+            headers.append(line)
+    headers = headers[:-1]  # 去掉表头
+
     with open(dest_file, "w", encoding="utf-8") as f:
+        f.writelines(headers)
         f.write(tb.get_string())
 
 
@@ -180,7 +197,7 @@ def import_records(records_file: str):
                     idaapi.msg(f"Parameter at {record.address:x} has no type info. Skipped.\n")
                     continue
 
-                dt_flag, dt_sz = _get_data_flags_size(param_type)
+                dt_flag, dt_sz = get_data_flags_size(param_type)
                 if dt_sz == -1:
                     idaapi.warning(f"Unsupported data type: {param_type}. Skipped.\n")
                     continue
@@ -213,7 +230,7 @@ def import_records(records_file: str):
                     continue
                 dt_str, array_size = m.groups()
                 array_size = int(array_size)
-                dt_flag, dt_sz = _get_data_flags_size(dt_str)
+                dt_flag, dt_sz = get_data_flags_size(dt_str)
                 if dt_sz == -1:
                     idaapi.warning(f"Unsupported data type: {dt_str}. Skipped.\n")
                     continue
