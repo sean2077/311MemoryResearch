@@ -269,6 +269,7 @@ def import_struct(struct: Struct):
     if tid == idaapi.BADADDR:
         tid = idaapi.add_struc(idaapi.BADADDR, struct.name)
         idaapi.msg(f"Struct {struct.name} created.\n")
+        struct.id = tid
     else:
         is_update = True
         idaapi.msg(f"Struct {struct.name} exists, updating...\n")
