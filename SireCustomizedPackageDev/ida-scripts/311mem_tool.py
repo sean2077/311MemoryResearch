@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 import idaapi
+import idautils
 import idc
 from prettytable import MARKDOWN, PrettyTable
 
@@ -384,6 +385,23 @@ def export_records(records_file: str):
                 if not is_auto_generated_name(name):
                     record.name = name
                 record.comment = idaapi.get_cmt(record.address, True) or ""
+
+    # 找出 IDA functions 中 所有 sub_ 开头的函数
+    for func_ea in idautils.Functions():
+        name = idaapi.get_func_name(func_ea)
+        if name.startswith("sub_"):
+            if func_ea not in addr2idx:
+                record = Record(func_ea, "函数")
+                record.comment = idaapi.get_func_cmt(func_ea, True)
+                # 仅记录非空注释的函数
+                if record.comment:
+                    records.append(record)
+                    addr2idx[func_ea] = len(records) - 1
+
+    # 按(类别，标签，地址)排序
+    records.sort(key=lambda x: x.address)
+    records.sort(key=lambda x: tuple(x.tags), reverse=True)
+    records.sort(key=lambda x: x.type)
 
     # 保存记录
     save_records(records, records_file)
