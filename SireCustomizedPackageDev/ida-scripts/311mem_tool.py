@@ -386,17 +386,22 @@ def export_records(records_file: str):
                     record.name = name
                 record.comment = idaapi.get_cmt(record.address, True) or ""
 
-    # 找出 IDA functions 中 所有 sub_ 开头的函数
+    # 找出 IDA functions 中其他带注释的函数（带注释表示在 IDA 对该函数做了记录）
     for func_ea in idautils.Functions():
-        name = idaapi.get_func_name(func_ea)
-        if name.startswith("sub_"):
-            if func_ea not in addr2idx:
-                record = Record(func_ea, "函数")
-                record.comment = idaapi.get_func_cmt(func_ea, True)
-                # 仅记录非空注释的函数
-                if record.comment:
-                    records.append(record)
-                    addr2idx[func_ea] = len(records) - 1
+        if func_ea not in addr2idx:
+            cmt = idaapi.get_func_cmt(func_ea, True)
+            if not cmt:
+                continue
+            # 去掉一些特例
+            if any(cmt.startswith(prefix) for prefix in ("Microsoft", "MFC", "?")):
+                continue
+            record = Record(func_ea, "函数")
+            record.comment = cmt
+            name = idaapi.get_func_name(func_ea)
+            if not is_auto_generated_name(name):
+                record.name = name
+            records.append(record)
+            addr2idx[func_ea] = len(records) - 1
 
     # 按(类别，标签，地址)排序
     records.sort(key=lambda x: x.address)
@@ -406,7 +411,7 @@ def export_records(records_file: str):
     # 保存记录
     save_records(records, records_file)
 
-    idaapi.msg("Records exported to {records_file}.\n")
+    idaapi.msg(f"Records exported to {records_file}.\n")
     idaapi.msg("Done.\n")
     idaapi.msg("-" * 50 + "\n")
 
