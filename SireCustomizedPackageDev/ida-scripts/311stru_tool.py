@@ -528,14 +528,14 @@ class San11StruPlugin(idaapi.plugin_t):
     wanted_hotkey = "Alt-Shift-S"
 
     def init(self):
-        idaapi.msg("ImportStructsPlugin initialized.\n")
+        idaapi.msg("San11StruPlugin initialized.\n")
         return idaapi.PLUGIN_OK
 
     def run(self, arg):
         action()
 
     def term(self):
-        idaapi.msg("ImportStructsPlugin terminated.\n")
+        idaapi.msg("San11StruPlugin terminated.\n")
 
 
 def PLUGIN_ENTRY():

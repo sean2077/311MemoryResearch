@@ -382,8 +382,9 @@ def _import_table(record: Record, records: list[Record], addr2idx: dict[int, int
     return True
 
 
-def import_records(records_file: str):
+def import_records():
     """读取 records_file 中的记录，导入到 IDA 中, 并将更新的信息保存到 records_file 中"""
+    records_file = MEM_RECORDS_FILE
 
     idaapi.msg("-" * 80 + "\n")
     idaapi.msg(f"Importing records from {records_file}...\n")
@@ -440,8 +441,9 @@ def import_records(records_file: str):
     idaapi.msg("-" * 80 + "\n")
 
 
-def export_records(records_file: str):
+def export_records():
     """读取 IDA 中已知内存地址记录的名称和注释等信息，导出到 records_file 中"""
+    records_file = MEM_RECORDS_FILE
 
     idaapi.msg("-" * 80 + "\n")
     idaapi.msg(f"Exporting records to {records_file}...\n")
@@ -508,9 +510,9 @@ def action():
     # 交互式选择导入或导出
     button = idaapi.ask_buttons("Import", "Export", "Cancel", 1, "Import or export memory records")
     if button == 1:
-        import_records(MEM_RECORDS_FILE)
+        import_records()
     elif button == 0:
-        export_records(MEM_RECORDS_FILE)
+        export_records()
     else:
         idaapi.msg("Canceled.\n")
 
@@ -521,13 +523,37 @@ def action():
 
 
 class San11MemPlugin(idaapi.plugin_t):
-    flags = 0
+    flags = idaapi.PLUGIN_PROC
     comment = "Import or export memory records (@san11pk)."
     help = "Alt-Shift-M to import or export san11pk memory records."
     wanted_name = "San11MemPlugin"
     wanted_hotkey = "Alt-Shift-M"
 
+    ACTION_IMPORT = "san11:import_memory"
+    ACTION_EXPORT = "san11:export_memory"
+
     def init(self):
+        # 注册 import action
+        import_action_desc = idaapi.action_desc_t(
+            self.ACTION_IMPORT,
+            "Import memory records",
+            IDACtxEntry(import_records),
+            "Alt-Shift-I",
+            "Import memory records (@san11pk)",
+            0,
+        )
+        assert idaapi.register_action(import_action_desc), "Failed to register action: import"
+        # 注册 export action
+        export_action_desc = idaapi.action_desc_t(
+            self.ACTION_EXPORT,
+            "Export memory records",
+            IDACtxEntry(export_records),
+            "Alt-Shift-E",
+            "Export memory records (@san11pk)",
+            0,
+        )
+        assert idaapi.register_action(export_action_desc), "Failed to register action: export"
+
         idaapi.msg("San11MemPlugin initialized.\n")
         return idaapi.PLUGIN_KEEP
 
@@ -535,7 +561,22 @@ class San11MemPlugin(idaapi.plugin_t):
         action()
 
     def term(self):
+        idaapi.unregister_action(self.ACTION_IMPORT)
+        idaapi.unregister_action(self.ACTION_EXPORT)
         idaapi.msg("San11MemPlugin terminated.\n")
+
+
+class IDACtxEntry(idaapi.action_handler_t):
+    def __init__(self, action_function):
+        idaapi.action_handler_t.__init__(self)
+        self.action_function = action_function
+
+    def activate(self, ctx):
+        self.action_function()
+        return 1
+
+    def update(self, ctx):
+        return idaapi.AST_ENABLE_ALWAYS
 
 
 def PLUGIN_ENTRY():
