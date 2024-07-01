@@ -199,6 +199,12 @@ def save_records(records: list[Record], dest_file: str = MEM_RECORDS_FILE):
         f.write("\n")
 
 
+def sort_records(records: list[Record]):
+    """对 records 进行排序"""
+    # 默认按（类别, 地址）排序
+    records.sort(key=lambda x: (x.type, x.address))
+
+
 def _import_function(record: Record) -> bool:
     """导入类型为 "函数" 的记录"""
     func = idaapi.get_func(record.address)
@@ -411,10 +417,8 @@ def import_records():
     idaapi.request_refresh(window_refresh_flags)
     idaapi.refresh_idaview()
 
-    # 按(类别，标签，地址)排序
-    records.sort(key=lambda x: x.address)
-    records.sort(key=lambda x: tuple(x.tags), reverse=True)
-    records.sort(key=lambda x: x.type)
+    # 按(类别，地址)排序
+    sort_records(records)
 
     # 找出地址重复的记录
     addr_set = set()
@@ -493,10 +497,8 @@ def export_records():
 
             idaapi.msg(f"Function at {func_ea:x} exported.\n")
 
-    # 按(类别，标签，地址)排序
-    records.sort(key=lambda x: x.address)
-    records.sort(key=lambda x: tuple(x.tags), reverse=True)
-    records.sort(key=lambda x: x.type)
+    # 按(类别，地址)排序
+    sort_records(records)
 
     # 保存记录
     save_records(records, records_file)
