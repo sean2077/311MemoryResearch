@@ -505,14 +505,14 @@ def import_struct(struct: Struct):
 def action():
     fps = ask_file_paths()
     for i, fp in enumerate(fps):
-        idaapi.msg(f"Processing {i + 1}/{len(fps)}: {fp}")
+        idaapi.msg(f"Processing {i + 1}/{len(fps)}: {fp}\n")
         st = Struct.from_file(fp)
         import_struct(st)
         st.to_file(fp)
 
-        idaapi.msg("Done.")
+        idaapi.msg("Done.\n")
 
-    idaapi.msg("-" * 50)
+    idaapi.msg("-" * 80 + "\n")
 
 
 ##########################################################################
