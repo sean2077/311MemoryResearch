@@ -77,6 +77,10 @@ def reach_table_start(line: str) -> bool:
 ##########################################################################
 
 
+RECORD_INFO_SEP = ";"  # 附加信息分隔符
+RECORD_TAG_SEP = ","  # 标签分隔符
+
+
 @dataclass
 class Record:
     address: int
@@ -97,14 +101,14 @@ class Record:
         type_ = type_.strip()
         name = name.strip()
         tags = tags.strip()
-        tags = list(tags.strip().split(",")) if tags else []
+        tags = list(tags.strip().split(RECORD_TAG_SEP)) if tags else []
         comment = comment.strip().replace("\\n", "\n")
         ret = cls(address, type_, name, tags, comment)
 
         # 附加信息
         info = info.strip()
         if info:
-            for item in info.split(","):
+            for item in info.split(RECORD_INFO_SEP):
                 key, value = item.split("=")
                 ret._info[key.strip()] = value.strip()
 
@@ -146,11 +150,11 @@ def save_records(records: list[Record], dest_file: str = MEM_RECORDS_FILE):
     headers = ("地址", "类型", "名称", "标签", "注释", "附加信息")
     rows = []
     for record in records:
-        info = ",".join([f"{k}={v}" for k, v in record._info.items()])
+        info = RECORD_INFO_SEP.join([f"{k}={v}" for k, v in record._info.items()])
         comment = record.comment
         if comment:
             comment = comment.replace("\n", "\\n")
-        rows.append((f"{record.address:08x}", record.type, record.name, ",".join(record.tags), comment, info))
+        rows.append((f"{record.address:08x}", record.type, record.name, RECORD_TAG_SEP.join(record.tags), comment, info))
 
     tb = PrettyTable()
     tb.set_style(MARKDOWN)
