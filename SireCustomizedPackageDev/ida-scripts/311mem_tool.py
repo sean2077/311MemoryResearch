@@ -195,6 +195,16 @@ def import_records(records_file: str):
                     idaapi.set_name(record.address, record.name)
                     idaapi.set_func_cmt(record.address, record.comment, True)
                     idaapi.msg(f"Function at {record.address:x} name updated to {record.name}.\n")
+                    # 若未记录函数签名，则记录
+                    if "signature" not in record._info:
+                        tinfo = idaapi.tinfo_t()
+                        if idaapi.get_tinfo(tinfo, record.address):
+                            record._info["signature"] = tinfo.dstr()
+                    else:  # 否则，尝试更新函数签名
+                        tinfo = idaapi.tinfo_t()
+                        if idaapi.parse_decl(tinfo, record._info["signature"]):
+                            idaapi.apply_tinfo(record.address, tinfo)
+                            idaapi.msg(f"Function at {record.address:x} signature updated.\n")
 
             case "参数":  # 2. 如果为参数，创建数据
                 param_type = record._info.get("type", None)
