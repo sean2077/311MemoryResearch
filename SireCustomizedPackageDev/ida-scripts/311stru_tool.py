@@ -159,6 +159,8 @@ class Struct:
             for line in file:
                 # 跳过空行
                 if not line.strip():
+                    if field_line_started:  # 如果字段行已经开始还遇到空行，说明字段行结束了
+                        break
                     continue
                 # 处理特殊行
                 if line.startswith("#"):
