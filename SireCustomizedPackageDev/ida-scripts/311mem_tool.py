@@ -6,6 +6,7 @@ san11pk内存地址记录工具，支持：
 
 import os
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -115,6 +116,24 @@ class Record:
         return ret
 
 
+# 记录有问题的 record
+_bad_records: dict[str, list[tuple[Record, str]]] = defaultdict(list)
+
+
+def _add_bad_record(record: Record, reason_type: str, detail: str = ""):
+    _bad_records[reason_type].append((record, detail))
+    if detail:
+        idaapi.msg(detail)
+
+
+def _print_bad_records():
+    for reason_type, records in _bad_records.items():
+        idaapi.msg(f"Bad records ({reason_type}): {len(records)}\n")
+        for record, detail in records:
+            detail = detail.strip("\n")
+            idaapi.msg(f"- {record.address:x} {record.name}: {detail}\n")
+
+
 def collect_records(file_path: str = MEM_RECORDS_FILE) -> tuple[list[Record], dict[int, int]]:
     records = []
     record_addr_idx_map = {}
@@ -137,8 +156,8 @@ def collect_records(file_path: str = MEM_RECORDS_FILE) -> tuple[list[Record], di
                 # 名称冲突处理
                 if record.name:
                     if record.name in name_set:
-                        idaapi.warning(f"Name conflict: {record.name}")
                         record.name += f"_{record.address:x}"
+                        _add_bad_record(record, "name_conflict")
                     name_set.add(record.name)
                 records.append(record)
                 record_addr_idx_map[record.address] = len(records) - 1
@@ -169,18 +188,20 @@ def save_records(records: list[Record], dest_file: str = MEM_RECORDS_FILE):
         for line in f:
             if reach_table_start(line):
                 break
+            if line.startswith("(最后更新时间："):
+                line = f"(最后更新时间：{get_now_time()})\n"
             headers.append(line)
     headers = headers[:-1]  # 去掉表头
 
     with open(dest_file, "w", encoding="utf-8") as f:
         f.writelines(headers)
-        f.write(tb.get_string())
+        f.write(tb.get_string().replace("-|", " |"))  # 与 vscode markdown 插件格式化结果一致
 
 
 def import_records(records_file: str):
     """读取 records_file 中的记录，导入到 IDA 中, 并将更新的信息保存到 records_file 中"""
 
-    idaapi.msg("-" * 50 + "\n")
+    idaapi.msg("-" * 80 + "\n")
     idaapi.msg(f"Importing records from {records_file}...\n")
 
     records, addr2idx = collect_records(records_file)
@@ -194,60 +215,80 @@ def import_records(records_file: str):
                 if func and func.start_ea == record.address:
                     idaapi.set_name(record.address, record.name)
                     idaapi.set_func_cmt(record.address, record.comment, True)
-                    idaapi.msg(f"Function at {record.address:x} name updated to {record.name}.\n")
-                    # 若未记录函数签名，则记录
-                    if "signature" not in record._info:
-                        tinfo = idaapi.tinfo_t()
-                        if idaapi.get_tinfo(tinfo, record.address):
-                            record._info["signature"] = tinfo.dstr()
+                    idaapi.msg(f"- Function at {record.address:x} name updated to {record.name}.\n")
+                    # 处理函数声明
+                    decl = idaapi.print_type(record.address, idaapi.PRTYPE_1LINE | idaapi.NTF_CHKSYNC)
+                    # 若未记录函数声明，则记录
+                    if "decl" not in record._info:
+                        if decl:
+                            record._info["decl"] = decl
                     else:  # 否则，尝试更新函数签名
                         tinfo = idaapi.tinfo_t()
-                        if idaapi.parse_decl(tinfo, record._info["signature"]):
-                            idaapi.apply_tinfo(record.address, tinfo)
-                            idaapi.msg(f"Function at {record.address:x} signature updated.\n")
+                        if idaapi.parse_decl(tinfo, None, record._info["decl"] + ";", idaapi.PT_SIL) is not None:
+                            if idaapi.apply_tinfo(record.address, tinfo, idaapi.TINFO_DEFINITE):
+                                idaapi.msg(f"- Function at {record.address:x} declaration updated to {record._info['decl']}.\n")
+                            else:
+                                _add_bad_record(
+                                    record,
+                                    "decl_update_failed",
+                                    f"Failed to update function at {record.address:x} declaration.\n",
+                                )
+                        else:
+                            # 无法解析函数声明，则更新函数签名为 IDA 中的签名
+                            _add_bad_record(
+                                record,
+                                "decl_parse_failed",
+                                f"Failed to parse function at {record.address:x} declaration: {record._info['decl']}, record declaration in IDA.\n",
+                            )
+                            if decl:
+                                record._info["decl"] = decl
 
             case "参数":  # 2. 如果为参数，创建数据
                 param_type = record._info.get("type", None)
                 if not param_type:
-                    idaapi.msg(f"Parameter at {record.address:x} has no type info. Skipped.\n")
+                    idaapi.msg(f"- Parameter at {record.address:x} has no type info. Skipped.\n")
                     continue
 
                 dt_flag, dt_sz = get_data_flags_size(param_type)
                 if dt_sz == -1:
-                    idaapi.warning(f"Unsupported data type: {param_type}. Skipped.\n")
+                    _add_bad_record(record, "unsupported_data_type", f"Unsupported data type: {param_type}. Skipped.\n")
                     continue
 
                 if param_type.startswith("struct_"):
                     tid = idaapi.get_struc_id(param_type)
                     if not idaapi.create_struct(record.address, dt_sz, tid):
-                        idaapi.warning(f"Failed to create struct {param_type} at {record.address:x}.\n")
+                        _add_bad_record(
+                            record, "create_struct_failed", f"Failed to create struct {param_type} at {record.address:x}.\n"
+                        )
                         continue
                 else:
                     if not idaapi.create_data(record.address, dt_flag, dt_sz, idaapi.BADNODE):
-                        idaapi.warning(f"Failed to create data type {param_type} at {record.address:x}.\n")
+                        _add_bad_record(
+                            record, "create_data_failed", f"Failed to create data type {param_type} at {record.address:x}.\n"
+                        )
                         continue
 
                 idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
                 idaapi.set_cmt(record.address, record.comment, True)
-                idaapi.msg(f"Parameter at {record.address:x} created, named to {record.name}.\n")
+                idaapi.msg(f"- Parameter at {record.address:x} created, named to {record.name}.\n")
 
             case "数表":  # 3. 如果为数表，创建数组
                 table_type = record._info.get("type", None)  # data_type[array_size]
                 if not table_type:
-                    idaapi.msg(f"Table at {record.address:x} has no type info. Skipped.\n")
+                    _add_bad_record(record, "no_table_type", f"Table at {record.address:x} has no type info. Skipped.\n")
                     continue
 
                 # 解析 data_type 和 array_size
                 pattern = r"(\w+)\[(\d+)\]"
                 m = re.match(pattern, table_type)
                 if not m:
-                    idaapi.msg(f"Invalid table type: {table_type}. Skipped.\n")
+                    _add_bad_record(record, "invalid_table_type", f"Invalid table type: {table_type}. Skipped.\n")
                     continue
                 dt_str, array_size = m.groups()
                 array_size = int(array_size)
                 dt_flag, dt_sz = get_data_flags_size(dt_str)
                 if dt_sz == -1:
-                    idaapi.warning(f"Unsupported data type: {dt_str}. Skipped.\n")
+                    _add_bad_record(record, "unsupported_data_type", f"Unsupported data type: {dt_str}. Skipped.\n")
                     continue
 
                 # 去掉原有定义
@@ -258,11 +299,15 @@ def import_records(records_file: str):
                 if is_struct_array:  # 结构体数组
                     tid = idaapi.get_struc_id(dt_str)
                     if not idaapi.create_struct(record.address, dt_sz, tid):
-                        idaapi.warning(f"Failed to create struct {dt_str} at {record.address:x}.\n")
+                        _add_bad_record(
+                            record, "create_struct_failed", f"Failed to create struct {dt_str} at {record.address:x}.\n"
+                        )
                         continue
                 else:
                     if not idaapi.create_data(record.address, dt_flag, dt_sz, idaapi.BADNODE):
-                        idaapi.warning(f"Failed to create data type {dt_str} at {record.address:x}.\n")
+                        _add_bad_record(
+                            record, "create_data_failed", f"Failed to create data type {dt_str} at {record.address:x}.\n"
+                        )
                         continue
 
                 # 创建数组
@@ -271,7 +316,7 @@ def import_records(records_file: str):
                 need_create_array = not no_array and is_small_array
                 if need_create_array:  # 作为一个整体创建数组
                     if not idc.make_array(record.address, array_size):
-                        idaapi.warning(f"Failed to create array at {record.address:x}.\n")
+                        _add_bad_record(record, "create_array_failed", f"Failed to create array at {record.address:x}.\n")
                         continue
                     # 设置数组参数
                     ap = idaapi.array_parameters_t()
@@ -289,11 +334,15 @@ def import_records(records_file: str):
                         addr = record.address + i * dt_sz
                         if is_struct_array:
                             if not idaapi.create_struct(addr, tid):
-                                idaapi.warning(f"Failed to create struct {dt_str} at {addr:x}.\n")
+                                _add_bad_record(
+                                    record, "create_struct_failed", f"Failed to create struct {dt_str} at {addr:x}.\n"
+                                )
                                 continue
                         else:
                             if not idc.create_data(addr, dt_flag, dt_sz, idaapi.BADNODE):
-                                idaapi.warning(f"Failed to create data type {dt_str} at {addr:x}.\n")
+                                _add_bad_record(
+                                    record, "create_data_failed", f"Failed to create data type {dt_str} at {addr:x}.\n"
+                                )
                                 continue
                         if record._info.get("no_array", None) != "1":
                             idaapi.set_cmt(addr, f"{record.name}[{i}]", True)
@@ -339,12 +388,12 @@ def import_records(records_file: str):
 
                 idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
                 idaapi.set_cmt(record.address, record.comment, True)
-                idaapi.msg(f"Table at {record.address:x} created, size: {array_size}, named to {record.name}.\n")
+                idaapi.msg(f"- Table at {record.address:x} created, size: {array_size}, named to {record.name}.\n")
 
             case _:  # 其他情况，更新地址名称和注释
                 idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
                 idaapi.set_cmt(record.address, record.comment, True)
-                idaapi.msg(f"Address at {record.address:x} name updated to {record.name}.\n")
+                idaapi.msg(f"- Address at {record.address:x} name updated to {record.name}.\n")
 
     # 刷新 IDA 视图和 反编译视图
     window_refresh_flags = idaapi.IWID_DISASM | idaapi.IWID_PSEUDOCODE
@@ -364,22 +413,27 @@ def import_records(records_file: str):
             duplicate_records.append(record)
             # records.remove(record)
         addr_set.add(record.address)
-    idaapi.msg(f"Found {len(duplicate_records)} duplicate records.\n")
+    idaapi.msg(f"Found {len(duplicate_records)} duplicate records:\n")
     for record in duplicate_records:
-        idaapi.msg(f"Duplicate record: {record.address:x} {record.name}\n")
+        idaapi.msg(f"- {record.address:x} {record.name}\n")
+    print()
+
+    # 输出有问题的记录
+    _print_bad_records()
+    print()
 
     # 保存记录
     save_records(records, records_file)
 
     idaapi.msg(f"Records imported from {records_file}.\n")
     idaapi.msg("Done.\n")
-    idaapi.msg("-" * 50 + "\n")
+    idaapi.msg("-" * 80 + "\n")
 
 
 def export_records(records_file: str):
     """读取 IDA 中已知内存地址记录的名称和注释等信息，导出到 records_file 中"""
 
-    idaapi.msg("-" * 50 + "\n")
+    idaapi.msg("-" * 80 + "\n")
     idaapi.msg(f"Exporting records to {records_file}...\n")
 
     # 读取记录
@@ -394,6 +448,10 @@ def export_records(records_file: str):
                     if not is_auto_generated_name(name):
                         record.name = name
                     record.comment = idaapi.get_func_cmt(record.address, True) or ""
+                    # 更新函数声明
+                    decl = idaapi.print_type(record.address, idaapi.PRTYPE_1LINE | idaapi.NTF_CHKSYNC)
+                    if decl:
+                        record._info["decl"] = decl
             case _:
                 name = idaapi.get_name(record.address)
                 if not is_auto_generated_name(name):
@@ -414,8 +472,14 @@ def export_records(records_file: str):
             name = idaapi.get_func_name(func_ea)
             if not is_auto_generated_name(name):
                 record.name = name
+            # 更新函数声明
+            decl = idaapi.print_type(func_ea, idaapi.PRTYPE_1LINE | idaapi.NTF_CHKSYNC)
+            if decl:
+                record._info["decl"] = decl
             records.append(record)
             addr2idx[func_ea] = len(records) - 1
+
+            idaapi.msg(f"Function at {func_ea:x} exported.\n")
 
     # 按(类别，标签，地址)排序
     records.sort(key=lambda x: x.address)
@@ -427,7 +491,7 @@ def export_records(records_file: str):
 
     idaapi.msg(f"{len(records)} records exported to {records_file}.\n")
     idaapi.msg("Done.\n")
-    idaapi.msg("-" * 50 + "\n")
+    idaapi.msg("-" * 80 + "\n")
 
 
 def action():
