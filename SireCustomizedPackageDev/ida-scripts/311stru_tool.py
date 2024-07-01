@@ -62,7 +62,9 @@ class StructField:
     comment: str
 
     _is_array: bool = False
-    _is_bit: bool = False
+    _is_ptr: bool = False
+    _data_flags: int = 0
+    _pure_data_type: str = ""  # 去掉 [] 和 * 的 data_type
 
     @classmethod
     def from_table_row(cls, row: str):  # | offset | nbytes | data_type | field_name | field_comment |
@@ -83,36 +85,36 @@ class StructField:
 
         ret = cls(offset, size, data_type, field_name, field_comment)
         ret._is_array = "[" in ret.data_type
-        ret._is_bit = "bit" in ret.data_type
+        ret._is_ptr = ret.data_type in ("pointer", "address", "pointer32") or "*" in ret.data_type
+        ret._data_flags = _get_data_flags(ret)
+        ret._pure_data_type = _get_pure_data_type(ret.data_type)
 
         return ret
 
-    def is_array(self):
-        return self._is_array
 
-    def is_bit(self):
-        return self._is_bit
+def _get_pure_data_type(data_type: str) -> str:
+    """获取去掉 [], *, () 的 data_type"""
+    return data_type.split("[")[0].split("*")[0].split("(")[0].strip()
 
 
 def _get_data_flags(fld: StructField):
-    dt_str = fld.data_type
-    if "[" in dt_str:  # 数组取元素类型
-        dt_str = dt_str.split("[")[0]
+    if fld._is_ptr:
+        return idaapi.FF_DWORD | idaapi.FF_1OFF | idaapi.FF_DATA
+        # FF_1OFF 表示 "First Offset"（第一个偏移量）。这个标志通常用于表示一个数据成员应该被解释为一个偏移量或指针。
 
-    if dt_str in ("byte", "bit"):
+    dt_str = fld._pure_data_type
+
+    if dt_str in ("byte", "char", "uchar"):
         return idaapi.byte_flag()
 
-    if dt_str in ("word", "short"):
+    if dt_str in ("word", "short", "ushort"):
         return idaapi.word_flag()
 
-    if dt_str in ("dword", "int"):
+    if dt_str in ("dword", "int", "uint"):
         return idaapi.dword_flag()
 
     if dt_str in ("float",):
         return idaapi.float_flag()
-
-    if dt_str in ("pointer32", "pointer", "address"):
-        return idaapi.FF_DWORD | idaapi.FF_1OFF | idaapi.FF_DATA
 
     if dt_str in ("string",):
         return idaapi.strlit_flag()
@@ -120,7 +122,7 @@ def _get_data_flags(fld: StructField):
     if dt_str.startswith("struct_"):
         return idaapi.stru_flag()
 
-    return idaapi.get_flags_by_size(fld.size)
+    return 0  # 其他类型用不到 flag
 
 
 @dataclass
@@ -251,6 +253,130 @@ def _find_struct_array_size(start_addr, struct_size):
     return item_cnt, cur_addr
 
 
+def _add_struc_member(sptr, field: StructField):
+    """添加结构体或结构体数组成员"""
+    member_struct_name = field._pure_data_type
+    opinfo = idaapi.opinfo_t()
+    opinfo.tid = idaapi.get_struc_id(member_struct_name)
+    if opinfo.tid == idaapi.BADADDR:
+        idaapi.warning(f"Struct '{member_struct_name}' not found")
+        return False
+    idaapi.add_struc_member(sptr, field.name, field.offset, idaapi.stru_flag(), opinfo, field.size)
+
+
+def _add_string_member(sptr, field: StructField):
+    """添加字符串成员"""
+    opinfo = idaapi.opinfo_t()
+    opinfo.strtype = idaapi.STRTYPE_C_32
+    idaapi.add_struc_member(sptr, field.name, field.offset, idaapi.strlit_flag(), opinfo, field.size)
+
+
+def _get_tinfo_from_base_type(base_type: str) -> idaapi.tinfo_t | None:
+    """根据基础类型返回 tinfo_t 对象"""
+    if base_type == "void":
+        return idaapi.tinfo_t(idaapi.BT_VOID)
+    if base_type in ("byte", "char", "int8"):
+        return idaapi.tinfo_t(idaapi.BT_INT8)
+    if base_type in ("uchar", "uint8"):
+        return idaapi.tinfo_t(idaapi.BT_INT8 | idaapi.BTMT_UNSIGNED)
+    if base_type in ("word", "short", "int16"):
+        return idaapi.tinfo_t(idaapi.BT_INT16)
+    if base_type in ("ushort", "uint16"):
+        return idaapi.tinfo_t(idaapi.BT_INT16 | idaapi.BTMT_UNSIGNED)
+    if base_type in ("dword", "int"):
+        return idaapi.tinfo_t(idaapi.BT_INT32)
+    if base_type in ("uint",):
+        return idaapi.tinfo_t(idaapi.BT_INT32 | idaapi.BTMT_UNSIGNED)
+    if base_type == "float":
+        return idaapi.tinfo_t(idaapi.BT_FLOAT)
+    if base_type == "bool":
+        return idaapi.tinfo_t(idaapi.BT_BOOL)
+
+    return None
+
+
+def _get_tinfo_from_stru_name(stru_name):
+    tinfo = idaapi.tinfo_t()
+    if tinfo.get_named_type(idaapi.get_idati(), stru_name):
+        return tinfo
+    return None
+
+
+def _get_tinfo_from_data_type(data_type: str) -> idaapi.tinfo_t | None:
+    """根据数据类型返回tinfo_t, 考虑基础类型和结构体类型与指针和数组嵌套定义的情况"""
+    pure_data_type = _get_pure_data_type(data_type)
+
+    # 快速排查一些特例
+    if pure_data_type in ("pointer", "address", "pointer32"):
+        return None
+
+    # 先处理基础类型和结构体类型
+    t = _get_tinfo_from_base_type(pure_data_type)
+    if t is None:
+        t = _get_tinfo_from_stru_name(pure_data_type)
+    if t is None:
+        return None
+
+    # 处理指针数组嵌套情况
+    remaining = data_type[len(pure_data_type) :].strip().replace(" ", "")
+    l = 0
+    r = len(remaining) - 1
+    cur = l
+    while l <= r:
+        if remaining[cur] == "*":
+            t.create_ptr(t)
+            l += 1
+            cur = l
+            # 处理一种特殊情况, 最里层的 *[, 实际应为 *(variable_name)[，所以也要跳到右边
+            if l <= r and remaining[l] == "[":
+                cur = r
+            continue
+        if remaining[cur] == "(":  # 此时应跳转到右边，从右边开始解析
+            l += 1
+            cur = r
+            continue
+        if remaining[cur] == ")":  # 此时应跳转到左边，从左边开始解析
+            r -= 1
+            cur = l
+            continue
+        if remaining[cur] == "]":  # 往左找到对应的 "["，然后解析数组大小
+            r = cur - 1
+            for cur in range(r, l - 1, -1):
+                if remaining[cur] == "[":
+                    break
+            else:
+                idaapi.warning(f"Invalid data type: {data_type}")
+                return None
+            try:
+                array_size = int(remaining[cur + 1 : r + 1]) if r > cur else 0
+            except ValueError:
+                idaapi.warning(f"Invalid array size: {data_type} for {remaining[cur + 1 : r + 1]} is not a int.")
+                return None
+            t.create_array(t, array_size)
+            r = cur - 1
+            cur = r
+            continue
+        if remaining[cur] == "[":
+            l = cur + 1
+            for cur in range(l, r + 1):
+                if remaining[cur] == "]":
+                    break
+            else:
+                idaapi.warning(f"Invalid data type: {data_type}")
+                return None
+            try:
+                array_size = int(remaining[l:cur]) if cur > l else 0
+            except ValueError:
+                idaapi.warning(f"Invalid array size: {data_type} for {remaining[l:cur]} is not a int.")
+                return None
+            t.create_array(t, array_size)
+            l = cur + 1
+            cur = l
+            continue
+
+    return t
+
+
 def import_struct(struct: Struct):
     # 先判断结构体是否已经存在，如果存在则对齐进行更新，否则创建新的结构体
     is_update = False
@@ -278,28 +404,30 @@ def import_struct(struct: Struct):
     idaapi.set_struc_cmt(tid, struct.comment, 1)
 
     for field in struct.fields:
-        if is_update:
-            # delete the existing member
+        if is_update:  # 更新结构体时，先删除原有成员
             idaapi.del_struc_members(sptr, field.offset, field.offset + field.size)
 
-        if field.data_type.startswith("struct_"):
-            # 如果是结构体类型，则先创建结构体
-            sub_struct_name = field.data_type
-            sub_struct_name = sub_struct_name.split("[")[0]
-            opinfo = idaapi.opinfo_t()
-            opinfo.tid = idaapi.get_struc_id(sub_struct_name)
-            if opinfo.tid == idaapi.BADADDR:
-                idaapi.msg(f"Struct {sub_struct_name} not found.\n")
-                continue
-            idaapi.add_struc_member(sptr, field.name, field.offset, idaapi.stru_flag(), opinfo, field.size)
-        elif field.data_type == "string":
-            opinfo = idaapi.opinfo_t()
-            opinfo.strtype = idaapi.STRTYPE_C_32
-            idaapi.add_struc_member(sptr, field.name, field.offset, idaapi.strlit_flag(), opinfo, field.size)
-        else:
-            dt = _get_data_flags(field)
-            idaapi.add_struc_member(sptr, field.name, field.offset, dt, None, field.size)
+        # 添加成员
+        if field._pure_data_type.startswith("struct_"):  # 结构体
+            if field._is_ptr:  # 结构体指针
+                idaapi.add_struc_member(sptr, field.name, field.offset, field._data_flags, None, field.size)
+            else:  # 结构体或结构体数组
+                _add_struc_member(sptr, field)
+        elif field.data_type == "string":  # 字符串
+            _add_string_member(sptr, field)
+        else:  # 其他类型（基础类型，指针）
+            idaapi.add_struc_member(sptr, field.name, field.offset, field._data_flags, None, field.size)
+
         mptr = idaapi.get_member(sptr, field.offset)
+        if mptr == idaapi.BADADDR:
+            idaapi.warning(f"Failed to add member '{field.name}' to struct '{struct.name}'")
+            continue
+
+        # set tinfo
+        tinfo = _get_tinfo_from_data_type(field.data_type)
+        if tinfo:
+            idaapi.set_member_tinfo(sptr, mptr, 0, tinfo, 0)
+        # set comment
         idaapi.set_member_cmt(mptr, field.comment, 1)
 
     struct_name = idaapi.get_struc_name(tid)
@@ -377,14 +505,14 @@ def import_struct(struct: Struct):
 def action():
     fps = ask_file_paths()
     for i, fp in enumerate(fps):
-        print(f"Processing {i + 1}/{len(fps)}: {fp}")
+        idaapi.msg(f"Processing {i + 1}/{len(fps)}: {fp}")
         st = Struct.from_file(fp)
         import_struct(st)
         st.to_file(fp)
 
-        print("Done.")
+        idaapi.msg("Done.")
 
-    print("-" * 50)
+    idaapi.msg("-" * 50)
 
 
 ##########################################################################
