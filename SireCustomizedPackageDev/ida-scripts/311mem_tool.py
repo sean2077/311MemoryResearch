@@ -411,7 +411,7 @@ def export_records(records_file: str):
     # 保存记录
     save_records(records, records_file)
 
-    idaapi.msg(f"Records exported to {records_file}.\n")
+    idaapi.msg(f"{len(records)} records exported to {records_file}.\n")
     idaapi.msg("Done.\n")
     idaapi.msg("-" * 50 + "\n")
 
