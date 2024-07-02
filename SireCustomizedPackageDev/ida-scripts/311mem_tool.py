@@ -378,8 +378,8 @@ def _import_table(record: Record, records: list[Record], addr2idx: dict[int, int
 
     # 补充数组信息
     array_detail = f"[end={record.address+dt_sz*array_size:x},size={array_size},item_size={dt_sz:#x}]"
-    if not record.comment.startswith(array_detail):
-        record.comment = array_detail + " " + record.comment
+    if not record.comment.endswith(array_detail):
+        record.comment += " " + array_detail
 
     idaapi.set_name(record.address, record.name, idaapi.SN_NOWARN)
     idaapi.set_cmt(record.address, record.comment, True)
