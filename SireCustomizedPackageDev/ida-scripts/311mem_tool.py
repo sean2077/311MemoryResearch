@@ -64,7 +64,7 @@ def get_data_flags_size(dt_str: str) -> tuple[int, int]:
 
 
 def is_auto_generated_name(name: str):
-    auto_prefixes = ["sub_", "loc_", "j_"]
+    auto_prefixes = ["sub_", "loc_", "j_", "def_"]
     return any(name.startswith(prefix) for prefix in auto_prefixes)
 
 
