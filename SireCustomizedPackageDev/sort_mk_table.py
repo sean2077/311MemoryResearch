@@ -8,17 +8,65 @@
     - 支持自定义每列值的排序规则（默认按字符串排序）
     
 依赖：
-    pip install attrs typer prettytable
+    pip install typer prettytable rich
 """
 
+import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import typer
 from prettytable import MARKDOWN, PrettyTable
+from rich.logging import RichHandler
 from typer import Typer
 
 app = Typer(add_completion=False)
+
+################################################################################
+### logging
+################################################################################
+
+
+def _create_log(name: str = "", level="INFO", prefix=""):
+    """创建 logger.
+
+    log 等级:
+        CRITICAL = 50
+        FATAL = CRITICAL
+        ERROR = 40
+        WARNING = 30
+        WARN = WARNING
+        INFO = 20
+        DEBUG = 10
+        NOTSET = 0
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    if not logger.hasHandlers():
+        h = RichHandler(level, rich_tracebacks=logger.level <= logging.DEBUG)
+        h.setLevel(level)
+        formatter = logging.Formatter("%(message)s", datefmt="%m/%d-%H:%M:%S")
+        h.setFormatter(formatter)
+        logger.addHandler(h)
+
+    if prefix:
+
+        class _AddPrefixAdapter(logging.LoggerAdapter):
+            def process(self, msg, kwargs):
+                return f"{prefix} {msg}", kwargs
+
+        return _AddPrefixAdapter(logger, {})
+
+    return logger
+
+
+log = _create_log("sort_mk_table")
+
+
+################################################################################
+### MarkdownTableParser
+################################################################################
 
 
 @dataclass
@@ -41,8 +89,8 @@ class MarkdownTableParser:
         self._after_contents: list[list[str]] = []  # 每个表格后的内容
         self._state = self._STATE_FINDING
         self._current_table = None
-        self._current_table_title = None
         self._current_table_index = -1
+        self._table_title = None
         self._specific_table_titles = None
 
     def parse(self, mk_file: str, specific_table_titles: list[str] = None) -> list[MarkdownTable]:
@@ -126,8 +174,8 @@ class MarkdownTableParser:
         self._after_contents.clear()
         self._state = self._STATE_FINDING
         self._current_table = None
-        self._current_table_title = None
         self._current_table_index = -1
+        self._table_title = None
         self._specific_table_titles = None
 
     def _parse_line(self, line: str):
@@ -147,8 +195,8 @@ class MarkdownTableParser:
 
         line = line.strip()
 
-        if self._specific_table_titles and line.strip() in self._specific_table_titles:
-            self._current_table_title = line
+        if self._specific_table_titles and line in self._specific_table_titles:
+            self._table_title = line
             return
 
         if self._reach_table(line):
@@ -168,7 +216,7 @@ class MarkdownTableParser:
             self._current_table_index += 1
 
             self._current_table.header = [s.strip() for s in header_line.strip().strip("|").split("|")]
-            self._current_table.title = self._current_table_title or f"Table_{self._current_table_index}"
+            self._current_table.title = self._table_title or f"Table_{self._current_table_index}"
             self._current_table.col_num = len(self._current_table.header)
 
             return
@@ -178,6 +226,7 @@ class MarkdownTableParser:
 
         if len(items) != self._current_table.col_num:
             self._state = self._STATE_FINDING
+            self._table_title = None
             self._after_contents[self._current_table_index].append(line)
             return
 
@@ -199,7 +248,7 @@ def _parse_converter(cvt_spec: str | Callable[[str], Any]) -> Callable[[str], An
         try:
             _cvt_func = eval(cvt_spec)
         except Exception as e:
-            print(f"解析转换函数失败: {e}")
+            log.error(f"解析转换函数失败: {e}")
             _cvt_func = lambda x: x
     elif callable(cvt_spec):
         _cvt_func = cvt_spec
@@ -216,6 +265,11 @@ def _parse_converter(cvt_spec: str | Callable[[str], Any]) -> Callable[[str], An
     return _cvt
 
 
+################################################################################
+### Typer App Command
+################################################################################
+
+
 @app.command()
 def sort_markdown_table(
     markdown_file: str = typer.Argument(..., help="markdown文件路径", show_default=False),
@@ -223,12 +277,12 @@ def sort_markdown_table(
         "0",
         "--sort-by",
         "-s",
-        help='要排序的列序号(从1开始); 支持多个排序字段，以逗号分隔; 如果序号加前缀 r 表示降序排序. 例: -s "r0,1,2"',
+        help='要排序的列序号(从0开始); 支持多个排序字段，以逗号分隔; 如果序号加前缀 r 表示降序排序. 例: -s "r0,1,2"',
         show_default=True,
         show_choices=False,
         case_sensitive=False,
     ),
-    specific_table_titles: list[str] = typer.Option(
+    specific_table: list[str] = typer.Option(
         None,
         "--titles",
         "-t",
@@ -250,24 +304,39 @@ def sort_markdown_table(
         show_default=False,
     ),
 ):
-    """排序 markdown 文件中的表格"""
+    """
+    排序 markdown 文件中的表格.
+
+    功能：
+        - 支持多个表格，也支持全选和可选部分表格
+        - 支持多列排序，每列均支持升序和降序排序
+        - 支持自定义每列值的排序规则（默认按字符串排序）
+
+    依赖：
+        pip install typer prettytable rich
+    """
 
     parser = MarkdownTableParser()
 
-    print(f"解析 markdown 文件: {markdown_file}")
-    parser.parse(markdown_file, specific_table_titles)
+    log.info(f"解析 markdown 文件: {markdown_file}")
+    tbs = parser.parse(markdown_file, specific_table)
+    log.info(f"解析到 {len(tbs)} 个表格")
 
     _converters = None
     if converters:
         _converters = {}
         for s in converters:
-            idx, cvt = s.strip().split("=")
+            kv = s.strip().split("=")
+            if len(kv) != 2:
+                log.error(f'忽略格式错误选项: "-c {s}", 正确格式为 "col_index=function", 如: -c 0=int -c 1="lambda x: int(x, 16)"')
+                continue
+            idx, cvt = kv
             _converters[int(idx)] = cvt
 
-    print(f"排序表格: {sort_by=}, {specific_table_titles=}, {converters=}")
-    parser.sort_tables(sort_by, specific_table_titles=specific_table_titles, converters=_converters)
+    log.info(f"排序表格: {sort_by=}, {specific_table=}, {converters=}")
+    parser.sort_tables(sort_by, specific_table_titles=specific_table, converters=_converters)
 
-    print(f"保存排序后的 markdown 文件: {save_as or markdown_file}")
+    log.info(f"保存排序后的 markdown 文件: {save_as or markdown_file}")
     parser.write_file(save_as or markdown_file)
 
 
