@@ -540,7 +540,7 @@ class San11MemPlugin(idaapi.plugin_t):
             self.ACTION_IMPORT,
             "Import memory records",
             IDACtxEntry(import_records),
-            "Alt-Shift-I",
+            "Shift-I",
             "Import memory records (@san11pk)",
             0,
         )
@@ -550,7 +550,7 @@ class San11MemPlugin(idaapi.plugin_t):
             self.ACTION_EXPORT,
             "Export memory records",
             IDACtxEntry(export_records),
-            "Alt-Shift-E",
+            "Shift-E",
             "Export memory records (@san11pk)",
             0,
         )

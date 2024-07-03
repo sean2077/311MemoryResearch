@@ -210,9 +210,7 @@ class Struct:
         if len(array_start_addrs) != len(array_sizes):
             array_sizes = []  # reset array_sizes
 
-        ret = cls(
-            name, name_zh, fields, size, comment, array_start_addrs, array_end_addrs, array_sizes, array_updated, struct_id
-        )
+        ret = cls(name, name_zh, fields, size, comment, array_start_addrs, array_end_addrs, array_sizes, array_updated, struct_id)
         ret._file_path = file_path
         ret._last_updated = get_now_time()
 
@@ -525,9 +523,9 @@ def action():
 class San11StruPlugin(idaapi.plugin_t):
     flags = 0
     comment = "Import or export structs (@san11pk)."
-    help = "Alt-Shift-S to import or export structs."
+    help = "Shift-S to import or export structs."
     wanted_name = "San11StruPlugin"
-    wanted_hotkey = "Alt-Shift-S"
+    wanted_hotkey = "Shift-S"
 
     def init(self):
         idaapi.msg("San11StruPlugin initialized.\n")
