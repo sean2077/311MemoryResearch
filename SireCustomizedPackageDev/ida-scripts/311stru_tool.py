@@ -136,6 +136,8 @@ class Struct:
 
     _content: list[str] = field(factory=list, init=False, repr=False)  # 原文件中表格以下至下一个表格标题之间的内容，用于写回文件
 
+    _modified: bool = field(default=False, init=False, repr=False)  # 是否被修改过
+
     # 各元信息解析函数表
     _META_PARSE_FUNCS = {
         "struct_name": ("name", str.strip),  # 元信息名: (属性名, 处理函数)
@@ -188,7 +190,8 @@ class Struct:
 
     def is_modified(self):
         """是否被修改过"""
-        return any(f._modified for f in self.fields)
+        return self._modified
+        # return any(f._modified for f in self.fields)
 
 
 _STRUCT_INDEX_PAT = re.compile(r"\[([0-9]+)\]")
@@ -675,7 +678,6 @@ def _export_structs(sid: int, struct: Struct):
 
         field = StructField(offset, field_size, data_type, field_name, comment)
         struct.fields.append(field)
-        field._modified = True
 
 
 def export_structs():
@@ -694,14 +696,18 @@ def export_structs():
             continue
         if sid in sid_to_index:
             struct = structs[sid_to_index[sid]]
+            old_table_str = struct.table_string()
             struct.name = name
             _export_structs(sid, struct)
+            new_table_str = struct.table_string()
+            struct._modified = old_table_str != new_table_str
         else:
             tb_index = len(structs) + 1
             struct = Struct(f"[{tb_index}]{name}")
             struct.id = sid
             struct.name = name
             _export_structs(sid, struct)
+            struct._modified = True
             parser.add_struct(struct)
 
     # 写回文件
