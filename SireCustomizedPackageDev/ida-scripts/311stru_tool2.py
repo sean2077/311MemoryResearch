@@ -5,7 +5,6 @@ san11pk's IDA Struct Tool
 import os
 from datetime import datetime
 
-import attrs
 import prettytable
 from attrs import define, field
 
@@ -14,9 +13,9 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 STRUCTS_FILE = os.path.join(os.path.dirname(SCRIPT_DIR), "material", "结构体汇总.md")
 
 
-##########################################################################
-###                               Utils                                ###
-##########################################################################
+#######################################################################################################
+###                                            Utils                                                ###
+#######################################################################################################
 
 
 def get_now_time() -> str:
@@ -45,25 +44,30 @@ def get_pure_data_type(data_type: str) -> str:
     return data_type.split("[")[0].split("*")[0].split("(")[0].strip()
 
 
-##########################################################################
-###                           结构体相关                                ###
-##########################################################################
+#######################################################################################################
+###                                     结构体文件读写相关                                             ###
+#######################################################################################################
 
 _STRUCT_TABLE_HEADER = ["offset", "nbytes", "data_type", "field_name", "field_comment"]
 
 
-_set_hooks = [attrs.setters.convert, lambda instance, attribute, value: instance._mark_modified()]
+def _set_hook(instance, attrib, new_value):
+    instance._mark_modified()
+    c = attrib.converter
+    if c:
+        return c(new_value)
+    return new_value
 
 
 @define
 class StructField:
     """结构体字段"""
 
-    offset: int = field(on_setattr=_set_hooks)
-    size: int = field(on_setattr=_set_hooks)  # 字段大小
-    data_type: str = field(on_setattr=_set_hooks)  # 数据类型
-    name: str = field(on_setattr=_set_hooks)  # 字段名
-    comment: str = field(on_setattr=_set_hooks)  # 字段注释
+    offset: int = field(on_setattr=_set_hook)
+    size: int = field(on_setattr=_set_hook)  # 字段大小
+    data_type: str = field(on_setattr=_set_hook)  # 数据类型
+    name: str = field(on_setattr=_set_hook)  # 字段名
+    comment: str = field(on_setattr=_set_hook)  # 字段注释
 
     _is_array: bool = field(default=False, init=False, repr=False)  # 是否是数组
     _is_ptr: bool = field(default=False, init=False, repr=False)  # 是否是指针
@@ -99,19 +103,12 @@ class StructField:
         return [f"{self.offset:X}", str(self.size), self.data_type, name, self.comment]
 
 
-_STRUCT_META_LINE_PREFIX = "- "
-
-
 def _cvt_int16_array(s: str):
-    if not s:
-        return []
-    return list(map(int16, s.split(",")))
+    return list(map(int16, s.split(","))) if s else []
 
 
 def _cvt_int_array(s: str):
-    if not s:
-        return []
-    return list(map(int, s.split(",")))
+    return list(map(int, s.split(","))) if s else []
 
 
 @define
@@ -121,7 +118,7 @@ class Struct:
     # 元信息
     name: str = field(default="", init=False)
     name_zh: str = field(default="", init=False)
-    id: int = field(default=-1, init=False)
+    id: int = field(default=0xFFFFFFFF, init=False)
     size: int = field(default=0, init=False)
     comment: str = field(default="", init=False)
     array_start_addrs: list[int] = field(factory=list, init=False)
@@ -149,9 +146,9 @@ class Struct:
     }
 
     def parse_meta_line(self, line: str):
-        if not line.startswith(_STRUCT_META_LINE_PREFIX):
+        if not line.startswith("- "):
             return
-        line = line[len(_STRUCT_META_LINE_PREFIX) :].strip()
+        line = line[2:].strip()
         for key, (attr, func) in self._META_PARSE_FUNCS.items():
             if line.startswith(key + ":"):
                 setattr(self, attr, func(line.removeprefix(key + ":").strip()))
@@ -159,15 +156,15 @@ class Struct:
 
     def meta_lines(self) -> list[str]:
         lines = []
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}struct_name_zh: {self.name_zh}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}struct_name: {self.name}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}struct_id: {self.id:08x}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}struct_size: {self.size:#x}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}array_start_addrs: {','.join(map(format_address, self.array_start_addrs))}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}array_end_addrs: {','.join(map(format_address, self.array_end_addrs))}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}array_sizes: {','.join(map(str, self.array_sizes))}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}array_updated: {self.array_updated}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}last_update: {self.last_update}\n")
+        lines.append(f"- struct_name_zh: {self.name_zh}\n")
+        lines.append(f"- struct_name: {self.name}\n")
+        lines.append(f"- struct_id: {self.id:08x}\n")
+        lines.append(f"- struct_size: {self.size:#x}\n")
+        lines.append(f"- array_start_addrs: {','.join(map(format_address, self.array_start_addrs))}\n")
+        lines.append(f"- array_end_addrs: {','.join(map(format_address, self.array_end_addrs))}\n")
+        lines.append(f"- array_sizes: {','.join(map(str, self.array_sizes))}\n")
+        lines.append(f"- array_updated: {self.array_updated}\n")
+        lines.append(f"- last_update: {self.last_update}\n")
         return lines
 
     def table_string(self) -> str:
@@ -261,6 +258,9 @@ class StructMDFileParser:
             raise ValueError(f"Invalid table row: {line}")
         self._current_table.fields.append(StructField.from_table_row(row))
 
+    def add_struct(self, struct: Struct):
+        self._structs.append(struct)
+
     def write_file(self, file_path: str):
         """写入文件"""
         now = get_now_time()
@@ -288,14 +288,25 @@ class StructMDFileParser:
 
 if __name__ == "__main__":
     parser = StructMDFileParser()
-    tbs = parser.parse(STRUCTS_FILE)
+    tbs = parser.parse(STRUCTS_FILE, ["城市", "港口", "关隘"])
 
-    for tb in tbs:
+    for i, tb in enumerate(tbs):
+        if i % 2 == 0:
+            tb.fields[0].comment = "test"
         print(tb)
+
+    new_tb = Struct()
+    new_tb.name = "test"
+    new_tb.name_zh = "测试"
+    parser.add_struct(new_tb)
 
     parser.write_file(STRUCTS_FILE)
 
     exit(0)
+
+#######################################################################################################
+###                                         IDA 操作相关                                             ###
+#######################################################################################################
 
 
 import idaapi
@@ -488,9 +499,9 @@ def action():
         idaapi.msg("Canceled.\n")
 
 
-##########################################################################
-###                        IDA Plugin 接口相关                           ###
-##########################################################################
+#######################################################################################################
+###                                     IDA Plugin 接口相关                                           ###
+#######################################################################################################
 
 
 class San11StruPlugin(idaapi.plugin_t):
