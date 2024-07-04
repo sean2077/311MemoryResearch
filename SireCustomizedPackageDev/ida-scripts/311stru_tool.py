@@ -3,6 +3,7 @@ san11pk's IDA Struct Tool
 """
 
 import os
+import re
 from datetime import datetime
 
 import prettytable
@@ -115,6 +116,8 @@ def _cvt_int_array(s: str):
 class Struct:
     """Markdown 文件中存储结构体表格及相关信息"""
 
+    title: str
+
     # 元信息
     name: str = field(default="", init=False)
     name_zh: str = field(default="", init=False)
@@ -188,6 +191,9 @@ class Struct:
         return any(f._modified for f in self.fields)
 
 
+_STRUCT_INDEX_PAT = re.compile(r"\[([0-9]+)\]")
+
+
 class StructMDFileParser:
     """结构体汇总.md 文件解析器"""
 
@@ -200,18 +206,18 @@ class StructMDFileParser:
         self._before_content: list[str] = []  # 第一个表格之前的内容
         self._state = self._STATE_FINDING_TITLE
         self._current_table: Struct = None
-        self._specific_table_titles: list[str] = None  # 如果不为 None, 则只解析指定标题的表格，否则解析所有表格
+        self._specific_table_indexes: list[int] = None  # 指定要解析的表格的索引（从 1 开始）
 
     def _reset(self):
         self._structs.clear()
         self._before_content.clear()
         self._state = self._STATE_FINDING_TITLE
         self._current_table = None
-        self._specific_table_titles = None
+        self._specific_table_indexes = None
 
-    def parse(self, mk_file: str, specific_table_titles: list[str] = None) -> list[Struct]:
+    def parse(self, mk_file: str, specific_table_indexes: list[int] = None) -> list[Struct]:
         self._reset()
-        self._specific_table_titles = specific_table_titles
+        self._specific_table_indexes = specific_table_indexes
 
         with open(mk_file, "r", encoding="utf-8") as file:
             for line in file:
@@ -231,11 +237,18 @@ class StructMDFileParser:
 
     def _state_finding_title(self, line: str):
         if line.startswith("## "):
-            title = line[3:].strip()
-            if not self._specific_table_titles or title in self._specific_table_titles:
+            # 判断是否需要过滤
+            table_index = 0
+            if self._specific_table_indexes:
+                # 表格标题形如 "## [1]xxx"，提取出表格索引
+                m = _STRUCT_INDEX_PAT.search(line)
+                if m:
+                    table_index = int(m.group(1))
+            if not self._specific_table_indexes or table_index in self._specific_table_indexes:
                 # 找到了一个表格标题
+                title = line[3:].strip()
                 self._state = self._STATE_BEFORE_TABLE
-                self._current_table = Struct()
+                self._current_table = Struct(title)
                 self._structs.append(self._current_table)
                 print(f"Found table: {title}")
                 return
@@ -276,7 +289,7 @@ class StructMDFileParser:
             f.writelines(self._before_content)
             for table in self._structs:
                 # 写入标题
-                f.write(f"## {table.name_zh}\n\n")
+                f.write(f"## {table.title}\n\n")
                 # 写入元信息
                 if table.is_modified():
                     table.last_update = now
@@ -604,9 +617,9 @@ def _import_struct(struct: Struct) -> bool:
     return True
 
 
-def import_structs():
+def import_structs(specific_table_indexes: list[int] = None):
     parser = StructMDFileParser()
-    structs = parser.parse(STRUCTS_FILE)
+    structs = parser.parse(STRUCTS_FILE, specific_table_indexes)
     idaapi.msg(f"Parsed structs: {len(structs)}\n")
 
     for i, struct in enumerate(structs):
@@ -625,8 +638,17 @@ def import_structs():
     idaapi.msg("-" * 80 + "\n")
 
 
+def import_selected_structs():
+    s = idaapi.ask_str("", 311, "Input selected struct indexes:")
+    selected = list(map(int, s.split(","))) if s else None
+    import_structs(selected)
+
+
 def export_structs():
-    pass
+    idaapi.msg("Exporting structs ...\n")
+
+    idaapi.msg("Exported.\n")
+    idaapi.msg("-" * 80 + "\n")
 
 
 def action():
@@ -652,8 +674,9 @@ class San11StruPlugin(idaapi.plugin_t):
     wanted_name = "San11StruPlugin"
     wanted_hotkey = ""
 
-    ACTION_IMPORT = "san11:import_struct"
-    ACTION_EXPORT = "san11:export_struct"
+    ACTION_IMPORT = "san11:import_structs"
+    ACTION_PART_IMPORT = "san11:import_part_structs"
+    ACTION_EXPORT = "san11:export_structs"
 
     def init(self):
         # 注册 import action
@@ -661,17 +684,27 @@ class San11StruPlugin(idaapi.plugin_t):
             self.ACTION_IMPORT,
             "Import structs",
             IDACtxEntry(import_structs),
-            "Shift-S",
+            "Alt-Shift-S",
             "Import structs (@san11pk)",
             0,
         )
         assert idaapi.register_action(import_action_desc), "Failed to register action: import"
+        # 注册 import part action
+        import_part_action_desc = idaapi.action_desc_t(
+            self.ACTION_PART_IMPORT,
+            "Import part structs",
+            IDACtxEntry(import_selected_structs),
+            "Shift-S",
+            "Import part structs (@san11pk)",
+            0,
+        )
+        assert idaapi.register_action(import_part_action_desc), "Failed to register action: import_part"
         # 注册 export action
         export_action_desc = idaapi.action_desc_t(
             self.ACTION_EXPORT,
             "Export structs",
             IDACtxEntry(export_structs),
-            "Alt-Shift-S",
+            "Shift-W",
             "Export structs (@san11pk)",
             0,
         )
@@ -685,6 +718,7 @@ class San11StruPlugin(idaapi.plugin_t):
 
     def term(self):
         idaapi.unregister_action(self.ACTION_IMPORT)
+        idaapi.unregister_action(self.ACTION_PART_IMPORT)
         idaapi.unregister_action(self.ACTION_EXPORT)
         idaapi.msg("San11StruPlugin terminated.\n")
 
