@@ -1,7 +1,8 @@
+#!python
 import os
 import shutil
 
-assets_dir = "assets"
+assets_dir = ".assets"
 trash_dir = ".trash"
 readme_path = "README.md"
 
