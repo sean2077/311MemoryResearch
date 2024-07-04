@@ -34,12 +34,6 @@ def int16(x: str) -> int:
     return int(x, 16)
 
 
-def smart_int(s: str):
-    if s.startswith("0x"):
-        return int(s, 16)
-    return int(s)
-
-
 def get_pure_data_type(data_type: str) -> str:
     """获取去掉 [], *, () 的 data_type"""
     return data_type.split("[")[0].split("*")[0].split("(")[0].strip()
@@ -53,10 +47,11 @@ _STRUCT_TABLE_HEADER = ["offset", "nbytes", "data_type", "field_name", "field_co
 
 
 def _set_hook(instance, attrib, new_value):
-    instance._mark_modified()
     c = attrib.converter
     if c:
-        return c(new_value)
+        new_value = c(new_value)
+    if getattr(instance, attrib.name) != new_value:
+        instance._mark_modified()
     return new_value
 
 
@@ -190,8 +185,7 @@ class Struct:
 
     def is_modified(self):
         """是否被修改过"""
-        return self._modified
-        # return any(f._modified for f in self.fields)
+        return self._modified or any(f._modified for f in self.fields)
 
 
 _STRUCT_INDEX_PAT = re.compile(r"\[([0-9]+)\]")
