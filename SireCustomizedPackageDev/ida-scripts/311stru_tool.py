@@ -3,20 +3,19 @@ san11pk's IDA Struct Tool
 """
 
 import os
-from dataclasses import dataclass
 from datetime import datetime
 
-import idaapi
-import idc
+import prettytable
+from attrs import define, field
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
-STRUCTS_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "material", "structs")
+STRUCTS_FILE = os.path.join(os.path.dirname(SCRIPT_DIR), "material", "结构体汇总.md")
 
 
-##########################################################################
-###                               Utils                                ###
-##########################################################################
+#######################################################################################################
+###                                            Utils                                                ###
+#######################################################################################################
 
 
 def get_now_time() -> str:
@@ -30,71 +29,278 @@ def format_address(addr: int) -> str:
     return f"{addr:08x}"
 
 
-def ask_file_paths() -> list[str]:
-    file_paths = []
-
-    button = idaapi.ask_buttons("All", "One", "Cancel", 0, "Select all or one file")
-    if button == 1:
-        for fp in os.listdir(STRUCTS_DIR):
-            if fp.endswith(".md"):
-                file_paths.append(os.path.join(STRUCTS_DIR, fp))
-    elif button == 0:
-        file_path = idaapi.ask_file(False, "*.md", "Please select a struct defining file.")
-        if file_path:
-            file_paths.append(file_path)
-    if not file_paths:
-        idaapi.msg("No file selected.\n")
-
-    return file_paths
+def int16(x: str) -> int:
+    return int(x, 16)
 
 
-##########################################################################
-###                           结构体相关                                ###
-##########################################################################
+def smart_int(s: str):
+    if s.startswith("0x"):
+        return int(s, 16)
+    return int(s)
 
 
-@dataclass
+def get_pure_data_type(data_type: str) -> str:
+    """获取去掉 [], *, () 的 data_type"""
+    return data_type.split("[")[0].split("*")[0].split("(")[0].strip()
+
+
+#######################################################################################################
+###                                     结构体文件读写相关                                             ###
+#######################################################################################################
+
+_STRUCT_TABLE_HEADER = ["offset", "nbytes", "data_type", "field_name", "field_comment"]
+
+
+def _set_hook(instance, attrib, new_value):
+    instance._mark_modified()
+    c = attrib.converter
+    if c:
+        return c(new_value)
+    return new_value
+
+
+@define
 class StructField:
-    offset: int
-    size: int  # 字段大小
-    data_type: str
-    name: str
-    comment: str
+    """结构体字段"""
 
-    _is_array: bool = False
-    _is_ptr: bool = False
-    _data_flags: int = 0
-    _pure_data_type: str = ""  # 去掉 [] 和 * 的 data_type
+    offset: int = field(on_setattr=_set_hook)
+    size: int = field(on_setattr=_set_hook)  # 字段大小
+    data_type: str = field(on_setattr=_set_hook)  # 数据类型
+    name: str = field(on_setattr=_set_hook)  # 字段名
+    comment: str = field(on_setattr=_set_hook)  # 字段注释
+
+    _is_array: bool = field(default=False, init=False, repr=False)  # 是否是数组
+    _is_ptr: bool = field(default=False, init=False, repr=False)  # 是否是指针
+    _pure_data_type: str = field(default="", init=False, repr=False)  # 去掉 [], *, () 的 data_type
+
+    _modified: bool = field(default=False, init=False, repr=False)  # 是否被修改
+
+    def _mark_modified(self):
+        object.__setattr__(self, "_modified", True)
+
+    def __attrs_post_init__(self):
+        self._modified = False
 
     @classmethod
-    def from_table_row(cls, row: str):  # | offset | nbytes | data_type | field_name | field_comment |
-        items = row.strip().strip("|").split("|")
-        if len(items) != 5:
-            raise ValueError(f"Invalid table line: {row}")
-
-        offset, size, data_type, field_name, field_comment = items
+    def from_table_row(cls, row: list[str]):
+        # | offset | nbytes | data_type | field_name | field_comment |
+        offset, size, data_type, field_name, field_comment = row
         offset = int(offset, 16)
         size = int(size)
         data_type = data_type.strip()
-        field_name = field_name.strip()
-        if field_name:
-            field_name = f"fld_{offset:X}_{field_name}"
-        else:
-            field_name = f"fld_{offset:X}"
+        field_name = f"fld_{offset:x}_{field_name.strip()}"
         field_comment = field_comment.strip()
-
         ret = cls(offset, size, data_type, field_name, field_comment)
+
         ret._is_array = "[" in ret.data_type
         ret._is_ptr = ret.data_type in ("pointer", "address", "pointer32") or "*" in ret.data_type
-        ret._data_flags = _get_data_flags(ret)
-        ret._pure_data_type = _get_pure_data_type(ret.data_type)
+        ret._pure_data_type = get_pure_data_type(ret.data_type)
 
         return ret
 
+    def to_table_row(self) -> list[str]:
+        name = self.name.removeprefix(f"fld_{self.offset:x}_")  # 去掉前缀
+        return [f"{self.offset:x}", str(self.size), self.data_type, name, self.comment]
 
-def _get_pure_data_type(data_type: str) -> str:
-    """获取去掉 [], *, () 的 data_type"""
-    return data_type.split("[")[0].split("*")[0].split("(")[0].strip()
+
+def _cvt_int16_array(s: str):
+    return list(map(int16, s.split(","))) if s else []
+
+
+def _cvt_int_array(s: str):
+    return list(map(int, s.split(","))) if s else []
+
+
+@define
+class Struct:
+    """Markdown 文件中存储结构体表格及相关信息"""
+
+    # 元信息
+    name: str = field(default="", init=False)
+    name_zh: str = field(default="", init=False)
+    id: int = field(default=0xFFFFFFFF, init=False)
+    size: int = field(default=0, init=False)
+    comment: str = field(default="", init=False)
+    array_start_addrs: list[int] = field(factory=list, init=False)
+    array_end_addrs: list[int] = field(factory=list, init=False)
+    array_sizes: list[int] = field(factory=list, init=False)
+    array_updated: bool = field(default=False, init=False)
+    last_update: str = field(default="", init=False)
+    wip: bool = field(default=False, init=False)  # 是否为还未完成的结构体
+
+    # 解析后的字段
+    fields: list[StructField] = field(factory=list, init=False)  # 表格中的字段
+
+    _content: list[str] = field(factory=list, init=False, repr=False)  # 原文件中表格以下至下一个表格标题之间的内容，用于写回文件
+
+    # 各元信息解析函数表
+    _META_PARSE_FUNCS = {
+        "struct_name": ("name", str.strip),  # 元信息名: (属性名, 处理函数)
+        "struct_name_zh": ("name_zh", str.strip),
+        "struct_id": ("id", int16),
+        "struct_size": ("size", int16),
+        "array_start_addrs": ("array_start_addrs", _cvt_int16_array),
+        "array_end_addrs": ("array_end_addrs", _cvt_int16_array),
+        "array_sizes": ("array_sizes", _cvt_int_array),
+        "array_updated": ("array_updated", lambda x: x.lower() == "true"),
+        "last_update": ("last_update", str.strip),
+        "wip": ("wip", lambda x: x.lower() == "true"),
+    }
+
+    def parse_meta_line(self, line: str):
+        if not line.startswith("- "):
+            return
+        line = line[2:].strip()
+        for key, (attr, func) in self._META_PARSE_FUNCS.items():
+            if line.startswith(key + ":"):
+                try:
+                    value = func(line.removeprefix(key + ":").strip())
+                    setattr(self, attr, value)
+                except ValueError:
+                    print(f"Failed to parse {key} value: {line}, skip.")
+                break
+
+    def meta_lines(self) -> list[str]:
+        lines = []
+        lines.append(f"- struct_name_zh: {self.name_zh}\n")
+        lines.append(f"- struct_name: {self.name}\n")
+        lines.append(f"- struct_id: {self.id:08x}\n")
+        lines.append(f"- struct_size: {self.size:#x}\n")
+        lines.append(f"- array_start_addrs: {','.join(map(format_address, self.array_start_addrs))}\n")
+        lines.append(f"- array_end_addrs: {','.join(map(format_address, self.array_end_addrs))}\n")
+        lines.append(f"- array_sizes: {','.join(map(str, self.array_sizes))}\n")
+        lines.append(f"- array_updated: {self.array_updated}\n")
+        lines.append(f"- last_update: {self.last_update}\n")
+        lines.append(f"- wip: {self.wip}\n")
+        return lines
+
+    def table_string(self) -> str:
+        tb = prettytable.PrettyTable()
+        tb.set_style(prettytable.MARKDOWN)
+        tb.align = "l"
+        tb.field_names = _STRUCT_TABLE_HEADER
+        for field in self.fields:
+            tb.add_row(field.to_table_row())
+        return tb.get_string().replace("-|", " |")  # 与 vscode markdown 插件格式化结果一致
+
+    def is_modified(self):
+        """是否被修改过"""
+        return any(f._modified for f in self.fields)
+
+
+class StructMDFileParser:
+    """结构体汇总.md 文件解析器"""
+
+    _STATE_FINDING_TITLE = 0  # 正在寻找下一个表格标题
+    _STATE_BEFORE_TABLE = 1  # 处理表格标题到表格上方之间的内容行
+    _STATE_ON_TABLE = 2  # 处理表格内容行
+
+    def __init__(self):
+        self._structs: list[Struct] = []
+        self._before_content: list[str] = []  # 第一个表格之前的内容
+        self._state = self._STATE_FINDING_TITLE
+        self._current_table: Struct = None
+        self._specific_table_titles: list[str] = None  # 如果不为 None, 则只解析指定标题的表格，否则解析所有表格
+
+    def _reset(self):
+        self._structs.clear()
+        self._before_content.clear()
+        self._state = self._STATE_FINDING_TITLE
+        self._current_table = None
+        self._specific_table_titles = None
+
+    def parse(self, mk_file: str, specific_table_titles: list[str] = None) -> list[Struct]:
+        self._reset()
+        self._specific_table_titles = specific_table_titles
+
+        with open(mk_file, "r", encoding="utf-8") as file:
+            for line in file:
+                self._parse_line(line)
+
+        return self._structs
+
+    def _parse_line(self, line: str):
+        if self._state == self._STATE_FINDING_TITLE:
+            return self._state_finding_title(line)
+
+        if self._state == self._STATE_BEFORE_TABLE:
+            return self._state_before_table(line)
+
+        if self._state == self._STATE_ON_TABLE:
+            return self._state_on_table(line)
+
+    def _state_finding_title(self, line: str):
+        if line.startswith("## "):
+            title = line[3:].strip()
+            if not self._specific_table_titles or title in self._specific_table_titles:
+                # 找到了一个表格标题
+                self._state = self._STATE_BEFORE_TABLE
+                self._current_table = Struct()
+                self._structs.append(self._current_table)
+                print(f"Found table: {title}")
+                return
+
+        if not self._current_table:
+            self._before_content.append(line)
+        else:
+            self._current_table._content.append(line)
+
+    def _state_before_table(self, line: str):
+        if self._reach_table_row(line):
+            self._state = self._STATE_ON_TABLE
+            return
+
+        # 解析结构体元信息
+        self._current_table.parse_meta_line(line)
+
+    def _state_on_table(self, line: str):
+        if not line.strip():  # 空行
+            self._state = self._STATE_FINDING_TITLE
+            self._current_table._content.append(line)
+            return
+
+        # 解析结构体字段
+        row = list(map(str.strip, line.strip().strip("|").split("|")))
+        if len(row) != len(_STRUCT_TABLE_HEADER):
+            # 无效的表格行，这种情况不应该出现
+            raise ValueError(f"Invalid table row: {line}")
+        self._current_table.fields.append(StructField.from_table_row(row))
+
+    def add_struct(self, struct: Struct):
+        self._structs.append(struct)
+
+    def write_file(self, file_path: str):
+        """写入文件"""
+        now = get_now_time()
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.writelines(self._before_content)
+            for table in self._structs:
+                # 写入标题
+                f.write(f"## {table.name_zh}\n\n")
+                # 写入元信息
+                if table.is_modified():
+                    table.last_update = now
+                f.writelines(table.meta_lines())
+                f.write("\n")
+                # 写入表格
+                f.write(table.table_string())
+                f.write("\n")
+                # 写入表格以下内容
+                f.writelines(table._content)
+
+    @staticmethod
+    def _reach_table_row(line: str) -> bool:
+        """判断是否到达表格内容开始行"""
+        return any(line.startswith(x) for x in ("| ---", "|--", "| :--", "|:--"))
+
+
+#######################################################################################################
+###                                         IDA 操作相关                                             ###
+#######################################################################################################
+
+
+import idaapi
+import idc
 
 
 def _get_data_flags(fld: StructField):
@@ -123,134 +329,6 @@ def _get_data_flags(fld: StructField):
         return idaapi.stru_flag()
 
     return 0  # 其他类型用不到 flag
-
-
-@dataclass
-class Struct:
-    name: str
-    name_zh: str
-    fields: list[StructField]
-    size: int
-    comment: str
-    array_start_addrs: list[int]
-    array_end_addrs: list[int]
-    array_sizes: list[int]
-    array_updated: bool = False
-    id: int = -1
-
-    _file_path: str = ""
-    _last_updated: str = ""
-
-    @classmethod
-    def from_file(cls, file_path: str):
-        name = ""
-        name_zh = ""
-        fields = []
-        size = 0
-        comment = ""
-        array_start_addrs = []
-        array_end_addrs = []
-        array_sizes = []
-        array_updated = False
-        struct_id = -1
-
-        with open(file_path, "r", encoding="utf-8") as file:
-            field_line_started = False
-            for line in file:
-                # 跳过空行
-                if not line.strip():
-                    if field_line_started:  # 如果字段行已经开始还遇到空行，说明字段行结束了
-                        break
-                    continue
-                # 处理特殊行
-                if line.startswith("#"):
-                    if line.startswith("# struct_name_zh:"):
-                        name_zh = line.split(":")[-1].strip()
-                    elif line.startswith("# struct_name:"):
-                        name = line.split(":")[-1].strip()
-                    elif line.startswith("# struct_size:"):
-                        sz = line.split(":")[-1].strip()
-                        size = int(sz, 16) if sz.startswith("0x") else int(sz)
-                    elif line.startswith("# struct_id:"):
-                        s = line.split(":")[-1].strip()
-                        if s:
-                            struct_id = int(s, 16)
-                    elif line.startswith("# array_start_addrs:"):
-                        s = line.split(":")[-1].strip()
-                        if s:
-                            array_start_addrs = list(map(lambda x: int(x, 16), s.split(",")))
-                    elif line.startswith("# array_end_addrs:"):
-                        s = line.split(":")[-1].strip()
-                        if s:
-                            array_end_addrs = list(map(lambda x: int(x, 16), s.split(",")))
-                    elif line.startswith("# array_sizes:"):
-                        s = line.split(":")[-1].strip()
-                        if s:
-                            array_sizes = list(map(int, s.split(",")))
-                    elif line.startswith("# array_updated:"):
-                        array_updated = line.split(":")[-1].strip().lower() in ("true", "1")
-                    continue
-                # 处理字段行
-                if not field_line_started and any(line.startswith(x) for x in ("| ---", "|--", "| :--", "|:--")):
-                    field_line_started = True
-                    continue
-                if field_line_started:
-                    field = StructField.from_table_row(line)
-                    fields.append(field)
-
-        if not name or size == 0:
-            raise ValueError(f"Invalid struct: {file_path}")
-
-        if not comment:
-            comment = f"{name_zh}. 最后更新：{get_now_time()}"
-
-        if len(array_start_addrs) != len(array_end_addrs):
-            array_end_addrs = []  # reset array_end_addrs
-
-        if len(array_start_addrs) != len(array_sizes):
-            array_sizes = []  # reset array_sizes
-
-        ret = cls(name, name_zh, fields, size, comment, array_start_addrs, array_end_addrs, array_sizes, array_updated, struct_id)
-        ret._file_path = file_path
-        ret._last_updated = get_now_time()
-
-        return ret
-
-    def to_file(self, file_path: str = ""):
-        """更新文件"""
-        file_path = file_path or self._file_path
-        with open(file_path, "r", encoding="utf-8") as file:
-            lines = file.readlines()
-            for i, line in enumerate(lines):
-                if lines[i].startswith("# struct_id:"):
-                    lines[i] = f"# struct_id: {self.id:#x}\n"
-                if line.startswith("# array_end_addrs:"):
-                    lines[i] = f"# array_end_addrs: {','.join(map(format_address, self.array_end_addrs))}\n"
-                if line.startswith("# array_sizes:"):
-                    lines[i] = f"# array_sizes: {','.join(map(str, self.array_sizes))}\n"
-                if line.startswith("# array_updated:"):
-                    lines[i] = f"# array_updated: {self.array_updated}\n"
-                if line.startswith("# last_update:"):
-                    lines[i] = f"# last_update: {self._last_updated}\n"
-
-        with open(file_path, "w", encoding="utf-8") as file:
-            file.writelines(lines)
-
-
-def _find_struct_array_size(start_addr, struct_size):
-    # 首先找到 start_addr 处的双字地址，这是每个结构体的标识
-    func_addr = idaapi.get_wide_dword(start_addr)
-
-    cur_addr = start_addr + struct_size
-    item_cnt = 1
-    while True:
-        cur_func_addr = idaapi.get_wide_dword(cur_addr)
-        if cur_func_addr != func_addr:
-            break
-        item_cnt += 1
-        cur_addr += struct_size
-
-    return item_cnt, cur_addr
 
 
 def _add_struc_member(sptr, field: StructField):
@@ -304,7 +382,7 @@ def _get_tinfo_from_stru_name(stru_name):
 
 def _get_tinfo_from_data_type(data_type: str) -> idaapi.tinfo_t | None:
     """根据数据类型返回tinfo_t, 考虑基础类型和结构体类型与指针和数组嵌套定义的情况"""
-    pure_data_type = _get_pure_data_type(data_type)
+    pure_data_type = get_pure_data_type(data_type)
 
     # 快速排查一些特例
     if pure_data_type in ("pointer", "address", "pointer32"):
@@ -377,46 +455,124 @@ def _get_tinfo_from_data_type(data_type: str) -> idaapi.tinfo_t | None:
     return t
 
 
-def import_struct(struct: Struct):
+def _find_struct_array_size(start_addr, struct_size):
+    # 首先找到 start_addr 处的双字地址，这是每个结构体的标识
+    func_addr = idaapi.get_wide_dword(start_addr)
+
+    cur_addr = start_addr + struct_size
+    item_cnt = 1
+    while True:
+        cur_func_addr = idaapi.get_wide_dword(cur_addr)
+        if cur_func_addr != func_addr:
+            break
+        item_cnt += 1
+        cur_addr += struct_size
+
+    return item_cnt, cur_addr
+
+
+def _create_struct_array(struct: Struct):
+    for i, array_start_addr in enumerate(struct.array_start_addrs):
+        # 先找出数组的结束地址和大小
+        if len(struct.array_end_addrs) > i:
+            array_end_addr = struct.array_end_addrs[i]
+            array_size = (array_end_addr - array_start_addr) // struct.size
+            if len(struct.array_sizes) > i:
+                struct.array_sizes[i] = array_size
+            else:
+                struct.array_sizes.append(array_size)
+        elif len(struct.array_sizes) > i:
+            array_size = struct.array_sizes[i]
+            array_end_addr = array_start_addr + array_size * struct.size
+            if len(struct.array_end_addrs) > i:
+                struct.array_end_addrs[i] = array_end_addr
+            else:
+                struct.array_end_addrs.append(array_end_addr)
+        else:  # 仅提供了起始地址，需自行查找 end_addr 和 array_size
+            # 大部分结构体第一个字段是指向该类结构体函数的指针，可根据这个特征来查找数组的结束地址
+            # 如果不是该特征，则无法自动查找结束地址，需要手动指定
+            array_size, array_end_addr = _find_struct_array_size(array_start_addr, struct.size)
+            struct.array_end_addrs.append(array_end_addr)
+            struct.array_sizes.append(array_size)
+
+            # 更新结构体相关函数所在地址名称
+            func_addr_name = struct.fields[0].name.removeprefix("fld_0_")
+            func_addr = idaapi.get_wide_dword(array_start_addr)
+            idaapi.set_name(func_addr, func_addr_name)
+
+        # 创建结构体数组
+        idaapi.del_items(array_start_addr, idaapi.DELIT_SIMPLE, array_size * struct.size)
+        if array_size <= 100 or array_size * struct.size < 0x1000:  # 小数组
+            idaapi.create_struct(array_start_addr, struct.size, struct.id)
+            if not idc.make_array(array_start_addr, array_size):
+                idaapi.warning(f"Failed to create array at {array_start_addr:x}.\n")
+                continue
+            ap = idaapi.array_parameters_t()
+            ap.flags = idaapi.AP_INDEX | idaapi.AP_IDXDEC | idaapi.AP_ARRAY
+            idaapi.set_array_parameters(array_start_addr, ap)
+        else:  # 大数组
+            cnt = 0
+            for addr in range(array_start_addr, array_end_addr, struct.size):
+                idaapi.create_struct(addr, struct.size, struct.id)
+                if cnt > 0:
+                    idaapi.set_cmt(addr, f"{struct.name}_ARRAY[{cnt}]", 1)
+                cnt += 1
+
+        # 结构体数组名和注释
+        array_name = f"{struct.name}_ARRAY"
+        if i > 0:
+            array_name += f"_{i}"
+        idaapi.set_name(array_start_addr, array_name)
+        array_comment = f"{array_name}，大小: {array_size}, 结构体大小: {struct.size:x} bytes"
+        idaapi.set_cmt(array_start_addr, array_comment, 1)
+
+        idaapi.msg(
+            f"Struct array {array_name} created, size: {array_size}, struct size: {struct.size}, start at {array_start_addr:x}, end at {array_end_addr:x}\n"
+        )
+
+
+def _import_struct(struct: Struct) -> bool:
     # 先判断结构体是否已经存在，如果存在则对齐进行更新，否则创建新的结构体
     is_update = False
 
     sid = struct.id
-    if sid == -1:  # 若未指定 id，则根据名称查找
+    if sid == idaapi.BADADDR:  # 若未指定 id，则根据名称查找
         sid = idaapi.get_struc_id(struct.name)
         struct.id = sid
-    else:
+    else:  # 若指定了 id，则根据 id 查找
         struct_name = idaapi.get_struc_name(sid)
         if struct_name != struct.name:
             idaapi.set_struc_name(sid, struct.name)
-            idaapi.msg(f"Struct {struct_name} renamed to {struct.name}.\n")
+            idaapi.msg(f"Renamed struct {struct_name} to {struct.name}\n")
         sid = idaapi.get_struc_id(struct.name)
 
-    if sid == idaapi.BADADDR:
+    if sid == idaapi.BADADDR:  # 不存在则创建
         sid = idaapi.add_struc(idaapi.BADADDR, struct.name)
-        idaapi.msg(f"Struct {struct.name} created.\n")
+        idaapi.msg(f"Added struct {struct.name}\n")
         struct.id = sid
     else:
         is_update = True
-        idaapi.msg(f"Struct {struct.name} exists, updating...\n")
+        idaapi.msg(f"Updating struct {struct.name}\n")
 
     sptr = idaapi.get_struc(sid)
-    idaapi.set_struc_cmt(sid, struct.comment, 1)
+    idaapi.set_struc_cmt(sid, struct.comment, True)
 
+    # 结构体字段
     for field in struct.fields:
         if is_update:  # 更新结构体时，先删除原有成员
             idaapi.del_struc_members(sptr, field.offset, field.offset + field.size)
 
         # 添加成员
+        data_flag = _get_data_flags(field)
         if field._pure_data_type.startswith("struct_"):  # 结构体
             if field._is_ptr:  # 结构体指针
-                idaapi.add_struc_member(sptr, field.name, field.offset, field._data_flags, None, field.size)
+                idaapi.add_struc_member(sptr, field.name, field.offset, data_flag, None, field.size)
             else:  # 结构体或结构体数组
                 _add_struc_member(sptr, field)
         elif field.data_type == "string":  # 字符串
             _add_string_member(sptr, field)
         else:  # 其他类型（基础类型，指针）
-            idaapi.add_struc_member(sptr, field.name, field.offset, field._data_flags, None, field.size)
+            idaapi.add_struc_member(sptr, field.name, field.offset, data_flag, None, field.size)
 
         mptr = idaapi.get_member(sptr, field.offset)
         if mptr == idaapi.BADADDR:
@@ -435,107 +591,115 @@ def import_struct(struct: Struct):
 
     # 校验结构体大小是否一致
     if struct.size == struct_size:
-        idaapi.msg(f"Struct {struct_name} size: {struct_size:X}\n")
+        idaapi.msg(f"Struct {struct_name} size: {struct_size:x}\n")
     else:
-        idaapi.warning(f"Struct size mismatch: {struct.size:X} vs {struct_size:X}\n")
+        idaapi.warning(f"Struct {struct_name} size mismatch: {struct.size:x} vs {struct_size:x}\n")
+        return False
 
     # IDA 视图中创建结构体数组
-    # struct.array_updated = False
     if not struct.array_updated and len(struct.array_start_addrs) > 0:
+        _create_struct_array(struct)
         struct.array_updated = True
-        for i, array_start_addr in enumerate(struct.array_start_addrs):
-            # 先找出数组的结束地址和大小
-            if len(struct.array_end_addrs) > i:
-                array_end_addr = struct.array_end_addrs[i]
-                array_size = (array_end_addr - array_start_addr) // struct.size
-                if len(struct.array_sizes) > i:
-                    struct.array_sizes[i] = array_size
-                else:
-                    struct.array_sizes.append(array_size)
-            elif len(struct.array_sizes) > i:
-                array_size = struct.array_sizes[i]
-                array_end_addr = array_start_addr + array_size * struct.size
-                if len(struct.array_end_addrs) > i:
-                    struct.array_end_addrs[i] = array_end_addr
-                else:
-                    struct.array_end_addrs.append(array_end_addr)
-            else:  # 仅提供了起始地址，需自行查找 end_addr 和 array_size
-                # 大部分结构体第一个字段是指向该类结构体函数的指针，可根据这个特征来查找数组的结束地址
-                # 如果不是该特征，则无法自动查找结束地址，需要手动指定
-                array_size, array_end_addr = _find_struct_array_size(array_start_addr, struct.size)
-                struct.array_end_addrs.append(array_end_addr)
-                struct.array_sizes.append(array_size)
 
-                # 更新结构体相关函数所在地址名称
-                func_addr_name = struct.fields[0].name.removeprefix("fld_0_")
-                func_addr = idaapi.get_wide_dword(array_start_addr)
-                idaapi.set_name(func_addr, func_addr_name)
-
-            # 创建结构体数组
-            idaapi.del_items(array_start_addr, idaapi.DELIT_SIMPLE, array_size * struct.size)
-            if array_size <= 100 or array_size * struct.size < 0x1000:  # 小数组
-                idaapi.create_struct(array_start_addr, struct.size, sid)
-                if not idc.make_array(array_start_addr, array_size):
-                    idaapi.warning(f"Failed to create array at {array_start_addr:X}.\n")
-                    continue
-                ap = idaapi.array_parameters_t()
-                ap.flags = idaapi.AP_INDEX | idaapi.AP_IDXDEC | idaapi.AP_ARRAY
-                idaapi.set_array_parameters(array_start_addr, ap)
-            else:  # 大数组
-                cnt = 0
-                for addr in range(array_start_addr, array_end_addr, struct.size):
-                    idaapi.create_struct(addr, struct.size, sid)
-                    if cnt > 0:
-                        idaapi.set_cmt(addr, f"{struct.name}_ARRAY[{cnt}]", 1)
-                    cnt += 1
-
-            # 结构体数组名和注释
-            array_name = f"{struct.name}_ARRAY"
-            if i > 0:
-                array_name += f"_{i}"
-            idaapi.set_name(array_start_addr, array_name)
-            array_comment = f"{array_name}，大小: {array_size}, 结构体大小: {struct.size:X} bytes"
-            idaapi.set_cmt(array_start_addr, array_comment, 1)
-
-            idaapi.msg(
-                f"Struct array {array_name} created, size: {array_size}, struct size: {struct.size}, start at {array_start_addr:X}, end at {array_end_addr:X}\n"
-            )
+    return True
 
 
-def action():
-    fps = ask_file_paths()
-    for i, fp in enumerate(fps):
-        idaapi.msg(f"Processing {i + 1}/{len(fps)}: {fp}\n")
-        st = Struct.from_file(fp)
-        import_struct(st)
-        st.to_file(fp)
+def import_structs():
+    parser = StructMDFileParser()
+    structs = parser.parse(STRUCTS_FILE)
+    idaapi.msg(f"Parsed structs: {len(structs)}\n")
 
-        idaapi.msg("Done.\n")
+    for i, struct in enumerate(structs):
+        idaapi.msg(f"Importing {i+1}/{len(structs)}: {struct.name_zh}({struct.name}) ...\n")
+        if struct.wip:
+            idaapi.msg(f"Skipped WIP struct: {struct.name_zh}({struct.name})\n")
+            continue
+        if _import_struct(struct):
+            idaapi.msg("Imported.\n")
+        else:
+            idaapi.msg("Failed to import.\n")
 
+    parser.write_file(STRUCTS_FILE)
+
+    idaapi.msg("All structs imported.\n")
     idaapi.msg("-" * 80 + "\n")
 
 
-##########################################################################
-###                        IDA Plugin 接口相关                           ###
-##########################################################################
+def export_structs():
+    pass
+
+
+def action():
+    # 交互式选择导入或导出
+    button = idaapi.ask_buttons("Import", "Export", "Cancel", 1, "Import or export structs")
+    if button == 1:
+        import_structs()
+    elif button == 0:
+        export_structs()
+    else:
+        idaapi.msg("Canceled.\n")
+
+
+#######################################################################################################
+###                                     IDA Plugin 接口相关                                           ###
+#######################################################################################################
 
 
 class San11StruPlugin(idaapi.plugin_t):
-    flags = 0
+    flags = idaapi.PLUGIN_PROC
     comment = "Import or export structs (@san11pk)."
-    help = "Shift-S to import or export structs."
+    help = "Shift-S to import or Alt-Shift-S to export san11pk structs."
     wanted_name = "San11StruPlugin"
-    wanted_hotkey = "Shift-S"
+    wanted_hotkey = ""
+
+    ACTION_IMPORT = "san11:import_struct"
+    ACTION_EXPORT = "san11:export_struct"
 
     def init(self):
+        # 注册 import action
+        import_action_desc = idaapi.action_desc_t(
+            self.ACTION_IMPORT,
+            "Import structs",
+            IDACtxEntry(import_structs),
+            "Shift-S",
+            "Import structs (@san11pk)",
+            0,
+        )
+        assert idaapi.register_action(import_action_desc), "Failed to register action: import"
+        # 注册 export action
+        export_action_desc = idaapi.action_desc_t(
+            self.ACTION_EXPORT,
+            "Export structs",
+            IDACtxEntry(export_structs),
+            "Alt-Shift-S",
+            "Export structs (@san11pk)",
+            0,
+        )
+        assert idaapi.register_action(export_action_desc), "Failed to register action: export"
+
         idaapi.msg("San11StruPlugin initialized.\n")
-        return idaapi.PLUGIN_OK
+        return idaapi.PLUGIN_KEEP
 
     def run(self, arg):
         action()
 
     def term(self):
+        idaapi.unregister_action(self.ACTION_IMPORT)
+        idaapi.unregister_action(self.ACTION_EXPORT)
         idaapi.msg("San11StruPlugin terminated.\n")
+
+
+class IDACtxEntry(idaapi.action_handler_t):
+    def __init__(self, action_function):
+        idaapi.action_handler_t.__init__(self)
+        self.action_function = action_function
+
+    def activate(self, ctx):
+        self.action_function()
+        return 1
+
+    def update(self, ctx):
+        return idaapi.AST_ENABLE_ALWAYS
 
 
 def PLUGIN_ENTRY():
