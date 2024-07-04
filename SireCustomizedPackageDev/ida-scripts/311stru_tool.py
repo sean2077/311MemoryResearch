@@ -219,7 +219,7 @@ class Struct:
     def to_file(self, file_path: str = ""):
         """更新文件"""
         file_path = file_path or self._file_path
-        with open(self._file_path, "r", encoding="utf-8") as file:
+        with open(file_path, "r", encoding="utf-8") as file:
             lines = file.readlines()
             for i, line in enumerate(lines):
                 if lines[i].startswith("# struct_id:"):
