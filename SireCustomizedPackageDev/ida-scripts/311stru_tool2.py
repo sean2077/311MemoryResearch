@@ -3,10 +3,11 @@ san11pk's IDA Struct Tool
 """
 
 import os
-from dataclasses import dataclass, field
 from datetime import datetime
 
+import attrs
 import prettytable
+from attrs import define, field
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -29,9 +30,8 @@ def format_address(addr: int) -> str:
     return f"{addr:08x}"
 
 
-def get_pure_data_type(data_type: str) -> str:
-    """获取去掉 [], *, () 的 data_type"""
-    return data_type.split("[")[0].split("*")[0].split("(")[0].strip()
+def int16(x: str) -> int:
+    return int(x, 16)
 
 
 def smart_int(s: str):
@@ -40,7 +40,10 @@ def smart_int(s: str):
     return int(s)
 
 
-int16 = lambda x: int(x, 16)
+def get_pure_data_type(data_type: str) -> str:
+    """获取去掉 [], *, () 的 data_type"""
+    return data_type.split("[")[0].split("*")[0].split("(")[0].strip()
+
 
 ##########################################################################
 ###                           结构体相关                                ###
@@ -49,20 +52,30 @@ int16 = lambda x: int(x, 16)
 _STRUCT_TABLE_HEADER = ["offset", "nbytes", "data_type", "field_name", "field_comment"]
 
 
-@dataclass
+_set_hooks = [attrs.setters.convert, lambda instance, attribute, value: instance._mark_modified()]
+
+
+@define
 class StructField:
     """结构体字段"""
 
-    offset: int
-    size: int  # 字段大小
-    data_type: str
-    name: str
-    comment: str
+    offset: int = field(on_setattr=_set_hooks)
+    size: int = field(on_setattr=_set_hooks)  # 字段大小
+    data_type: str = field(on_setattr=_set_hooks)  # 数据类型
+    name: str = field(on_setattr=_set_hooks)  # 字段名
+    comment: str = field(on_setattr=_set_hooks)  # 字段注释
 
-    _is_array: bool = False
-    _is_ptr: bool = False
-    _data_flags: int = 0
-    _pure_data_type: str = ""  # 去掉 [] 和 * 的 data_type
+    _is_array: bool = field(default=False, init=False, repr=False)  # 是否是数组
+    _is_ptr: bool = field(default=False, init=False, repr=False)  # 是否是指针
+    _pure_data_type: str = field(default="", init=False, repr=False)  # 去掉 [], *, () 的 data_type
+
+    _modified: bool = field(default=False, init=False, repr=False)  # 是否被修改
+
+    def _mark_modified(self):
+        object.__setattr__(self, "_modified", True)
+
+    def __attrs_post_init__(self):
+        self._modified = False
 
     @classmethod
     def from_table_row(cls, row: list[str]):
@@ -77,78 +90,84 @@ class StructField:
 
         ret._is_array = "[" in ret.data_type
         ret._is_ptr = ret.data_type in ("pointer", "address", "pointer32") or "*" in ret.data_type
-        # ret._data_flags = _get_data_flags(ret)
         ret._pure_data_type = get_pure_data_type(ret.data_type)
 
         return ret
 
     def to_table_row(self) -> list[str]:
-        name = self.name.strip(f"fld_{self.offset:X}_", 1)  # 去掉前缀
+        name = self.name.removeprefix(f"fld_{self.offset:X}_")  # 去掉前缀
         return [f"{self.offset:X}", str(self.size), self.data_type, name, self.comment]
 
 
 _STRUCT_META_LINE_PREFIX = "- "
 
 
-@dataclass
+def _cvt_int16_array(s: str):
+    if not s:
+        return []
+    return list(map(int16, s.split(",")))
+
+
+def _cvt_int_array(s: str):
+    if not s:
+        return []
+    return list(map(int, s.split(",")))
+
+
+@define
 class Struct:
     """Markdown 文件中存储结构体表格及相关信息"""
 
     # 元信息
-    name: str = ""
-    name_zh: str = ""
-    id: int = -1
-    size: int = 0
-    comment: str = ""
-    array_start_addrs: list[int] = field(default_factory=list)
-    array_end_addrs: list[int] = field(default_factory=list)
-    array_sizes: list[int] = field(default_factory=list)
-    array_updated: bool = False
-    last_updated: str = ""
+    name: str = field(default="", init=False)
+    name_zh: str = field(default="", init=False)
+    id: int = field(default=-1, init=False)
+    size: int = field(default=0, init=False)
+    comment: str = field(default="", init=False)
+    array_start_addrs: list[int] = field(factory=list, init=False)
+    array_end_addrs: list[int] = field(factory=list, init=False)
+    array_sizes: list[int] = field(factory=list, init=False)
+    array_updated: bool = field(default=False, init=False)
+    last_update: str = field(default="", init=False)
 
     # 解析后的字段
-    fields: list[StructField] = field(default_factory=list)  # 表格中的字段
+    fields: list[StructField] = field(factory=list, init=False)  # 表格中的字段
 
-    _content: list[str] = field(default_factory=list)  # 原文件中表格以下至下一个表格标题之间的内容，用于写回文件
+    _content: list[str] = field(factory=list, init=False, repr=False)  # 原文件中表格以下至下一个表格标题之间的内容，用于写回文件
+
+    # 各元信息解析函数表
+    _META_PARSE_FUNCS = {
+        "struct_name": ("name", str.strip),  # 元信息名: (属性名, 处理函数)
+        "struct_name_zh": ("name_zh", str.strip),
+        "struct_id": ("id", int16),
+        "struct_size": ("size", int16),
+        "array_start_addrs": ("array_start_addrs", _cvt_int16_array),
+        "array_end_addrs": ("array_end_addrs", _cvt_int16_array),
+        "array_sizes": ("array_sizes", _cvt_int_array),
+        "array_updated": ("array_updated", lambda x: x.lower() == "true"),
+        "last_update": ("last_update", str.strip),
+    }
 
     def parse_meta_line(self, line: str):
         if not line.startswith(_STRUCT_META_LINE_PREFIX):
             return
         line = line[len(_STRUCT_META_LINE_PREFIX) :].strip()
-        if line.startswith("struct_name_zh:"):
-            self.name_zh = line.split(":", 1)[1].strip()
-        elif line.startswith("struct_name:"):
-            self.name = line.split(":", 1)[1].strip()
-        elif line.startswith("struct_id:"):
-            self.id = int(line.split(":", 1)[1].strip(), 16)
-        elif line.startswith("struct_size:"):
-            self.size = smart_int(line.split(":", 1)[1].strip())
-        elif line.startswith("array_start_addrs:"):
-            s = line.split(":", 1)[1].strip()
-            if s:
-                self.array_start_addrs = list(map(int16, s.split(",")))
-        elif line.startswith("array_end_addrs:"):
-            s = line.split(":", 1)[1].strip()
-            if s:
-                self.array_end_addrs = list(map(int16, s.split(",")))
-        elif line.startswith("array_sizes:"):
-            s = line.split(":", 1)[1].strip()
-            if s:
-                self.array_sizes = list(map(int, s.split(",")))
-        elif line.startswith("array_updated:"):
-            self.array_updated = line.split(":", 1)[1].strip().lower() == "true"
+        for key, (attr, func) in self._META_PARSE_FUNCS.items():
+            if line.startswith(key + ":"):
+                setattr(self, attr, func(line.removeprefix(key + ":").strip()))
+                break
 
     def meta_lines(self) -> list[str]:
         lines = []
         lines.append(f"{_STRUCT_META_LINE_PREFIX}struct_name_zh: {self.name_zh}\n")
         lines.append(f"{_STRUCT_META_LINE_PREFIX}struct_name: {self.name}\n")
         lines.append(f"{_STRUCT_META_LINE_PREFIX}struct_id: {self.id:08x}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}struct_size: {self.size}\n")
+        lines.append(f"{_STRUCT_META_LINE_PREFIX}struct_size: {self.size:#x}\n")
         lines.append(f"{_STRUCT_META_LINE_PREFIX}array_start_addrs: {','.join(map(format_address, self.array_start_addrs))}\n")
         lines.append(f"{_STRUCT_META_LINE_PREFIX}array_end_addrs: {','.join(map(format_address, self.array_end_addrs))}\n")
         lines.append(f"{_STRUCT_META_LINE_PREFIX}array_sizes: {','.join(map(str, self.array_sizes))}\n")
         lines.append(f"{_STRUCT_META_LINE_PREFIX}array_updated: {self.array_updated}\n")
-        lines.append(f"{_STRUCT_META_LINE_PREFIX}last_updated: {self.last_updated}\n")
+        lines.append(f"{_STRUCT_META_LINE_PREFIX}last_update: {self.last_update}\n")
         return lines
 
     def table_string(self) -> str:
@@ -158,7 +177,11 @@ class Struct:
         tb.field_names = _STRUCT_TABLE_HEADER
         for field in self.fields:
             tb.add_row(field.to_table_row())
-        return tb.get_string().replace("-|", " |") + "\n"  # 与 vscode markdown 插件格式化结果一致
+        return tb.get_string().replace("-|", " |")  # 与 vscode markdown 插件格式化结果一致
+
+    def is_modified(self):
+        """是否被修改过"""
+        return any(f._modified for f in self.fields)
 
 
 class StructMDFileParser:
@@ -238,16 +261,17 @@ class StructMDFileParser:
             raise ValueError(f"Invalid table row: {line}")
         self._current_table.fields.append(StructField.from_table_row(row))
 
-    def to_file(self, file_path: str):
+    def write_file(self, file_path: str):
         """写入文件"""
         now = get_now_time()
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.writelines(self._before_content)
             for table in self._structs:
                 # 写入标题
                 f.write(f"## {table.name_zh}\n\n")
                 # 写入元信息
-                table.last_updated = now
+                if table.is_modified():
+                    table.last_update = now
                 f.writelines(table.meta_lines())
                 f.write("\n")
                 # 写入表格
@@ -267,7 +291,9 @@ if __name__ == "__main__":
     tbs = parser.parse(STRUCTS_FILE)
 
     for tb in tbs:
-        print(tb.name_zh)
+        print(tb)
+
+    parser.write_file(STRUCTS_FILE)
 
     exit(0)
 
