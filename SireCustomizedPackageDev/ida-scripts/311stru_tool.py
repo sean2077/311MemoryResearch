@@ -381,27 +381,27 @@ def import_struct(struct: Struct):
     # 先判断结构体是否已经存在，如果存在则对齐进行更新，否则创建新的结构体
     is_update = False
 
-    tid = struct.id
-    if tid == -1:  # 若未指定 id，则根据名称查找
-        tid = idaapi.get_struc_id(struct.name)
-        struct.id = tid
+    sid = struct.id
+    if sid == -1:  # 若未指定 id，则根据名称查找
+        sid = idaapi.get_struc_id(struct.name)
+        struct.id = sid
     else:
-        struct_name = idaapi.get_struc_name(tid)
+        struct_name = idaapi.get_struc_name(sid)
         if struct_name != struct.name:
-            idaapi.set_struc_name(tid, struct.name)
+            idaapi.set_struc_name(sid, struct.name)
             idaapi.msg(f"Struct {struct_name} renamed to {struct.name}.\n")
-        tid = idaapi.get_struc_id(struct.name)
+        sid = idaapi.get_struc_id(struct.name)
 
-    if tid == idaapi.BADADDR:
-        tid = idaapi.add_struc(idaapi.BADADDR, struct.name)
+    if sid == idaapi.BADADDR:
+        sid = idaapi.add_struc(idaapi.BADADDR, struct.name)
         idaapi.msg(f"Struct {struct.name} created.\n")
-        struct.id = tid
+        struct.id = sid
     else:
         is_update = True
         idaapi.msg(f"Struct {struct.name} exists, updating...\n")
 
-    sptr = idaapi.get_struc(tid)
-    idaapi.set_struc_cmt(tid, struct.comment, 1)
+    sptr = idaapi.get_struc(sid)
+    idaapi.set_struc_cmt(sid, struct.comment, 1)
 
     for field in struct.fields:
         if is_update:  # 更新结构体时，先删除原有成员
@@ -430,7 +430,7 @@ def import_struct(struct: Struct):
         # set comment
         idaapi.set_member_cmt(mptr, field.comment, 1)
 
-    struct_name = idaapi.get_struc_name(tid)
+    struct_name = idaapi.get_struc_name(sid)
     struct_size = idaapi.get_struc_size(sptr)
 
     # 校验结构体大小是否一致
@@ -474,7 +474,7 @@ def import_struct(struct: Struct):
             # 创建结构体数组
             idaapi.del_items(array_start_addr, idaapi.DELIT_SIMPLE, array_size * struct.size)
             if array_size <= 100 or array_size * struct.size < 0x1000:  # 小数组
-                idaapi.create_struct(array_start_addr, struct.size, tid)
+                idaapi.create_struct(array_start_addr, struct.size, sid)
                 if not idc.make_array(array_start_addr, array_size):
                     idaapi.warning(f"Failed to create array at {array_start_addr:X}.\n")
                     continue
@@ -484,7 +484,7 @@ def import_struct(struct: Struct):
             else:  # 大数组
                 cnt = 0
                 for addr in range(array_start_addr, array_end_addr, struct.size):
-                    idaapi.create_struct(addr, struct.size, tid)
+                    idaapi.create_struct(addr, struct.size, sid)
                     if cnt > 0:
                         idaapi.set_cmt(addr, f"{struct.name}_ARRAY[{cnt}]", 1)
                     cnt += 1

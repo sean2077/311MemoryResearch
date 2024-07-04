@@ -88,7 +88,7 @@ class StructField:
         offset = int(offset, 16)
         size = int(size)
         data_type = data_type.strip()
-        field_name = f"fld_{offset:X}_{field_name.strip()}"
+        field_name = f"fld_{offset:x}_{field_name.strip()}"
         field_comment = field_comment.strip()
         ret = cls(offset, size, data_type, field_name, field_comment)
 
@@ -99,8 +99,8 @@ class StructField:
         return ret
 
     def to_table_row(self) -> list[str]:
-        name = self.name.removeprefix(f"fld_{self.offset:X}_")  # 去掉前缀
-        return [f"{self.offset:X}", str(self.size), self.data_type, name, self.comment]
+        name = self.name.removeprefix(f"fld_{self.offset:x}_")  # 去掉前缀
+        return [f"{self.offset:x}", str(self.size), self.data_type, name, self.comment]
 
 
 def _cvt_int16_array(s: str):
@@ -126,6 +126,7 @@ class Struct:
     array_sizes: list[int] = field(factory=list, init=False)
     array_updated: bool = field(default=False, init=False)
     last_update: str = field(default="", init=False)
+    wip: bool = field(default=False, init=False)  # 是否为还未完成的结构体
 
     # 解析后的字段
     fields: list[StructField] = field(factory=list, init=False)  # 表格中的字段
@@ -143,6 +144,7 @@ class Struct:
         "array_sizes": ("array_sizes", _cvt_int_array),
         "array_updated": ("array_updated", lambda x: x.lower() == "true"),
         "last_update": ("last_update", str.strip),
+        "wip": ("wip", lambda x: x.lower() == "true"),
     }
 
     def parse_meta_line(self, line: str):
@@ -165,6 +167,7 @@ class Struct:
         lines.append(f"- array_sizes: {','.join(map(str, self.array_sizes))}\n")
         lines.append(f"- array_updated: {self.array_updated}\n")
         lines.append(f"- last_update: {self.last_update}\n")
+        lines.append(f"- wip: {self.wip}\n")
         return lines
 
     def table_string(self) -> str:
@@ -286,30 +289,13 @@ class StructMDFileParser:
         return any(line.startswith(x) for x in ("| ---", "|--", "| :--", "|:--"))
 
 
-if __name__ == "__main__":
-    parser = StructMDFileParser()
-    tbs = parser.parse(STRUCTS_FILE, ["城市", "港口", "关隘"])
-
-    for i, tb in enumerate(tbs):
-        if i % 2 == 0:
-            tb.fields[0].comment = "test"
-        print(tb)
-
-    new_tb = Struct()
-    new_tb.name = "test"
-    new_tb.name_zh = "测试"
-    parser.add_struct(new_tb)
-
-    parser.write_file(STRUCTS_FILE)
-
-    exit(0)
-
 #######################################################################################################
 ###                                         IDA 操作相关                                             ###
 #######################################################################################################
 
 
 import idaapi
+import idc
 
 
 def _get_data_flags(fld: StructField):
@@ -338,22 +324,6 @@ def _get_data_flags(fld: StructField):
         return idaapi.stru_flag()
 
     return 0  # 其他类型用不到 flag
-
-
-def _find_struct_array_size(start_addr, struct_size):
-    # 首先找到 start_addr 处的双字地址，这是每个结构体的标识
-    func_addr = idaapi.get_wide_dword(start_addr)
-
-    cur_addr = start_addr + struct_size
-    item_cnt = 1
-    while True:
-        cur_func_addr = idaapi.get_wide_dword(cur_addr)
-        if cur_func_addr != func_addr:
-            break
-        item_cnt += 1
-        cur_addr += struct_size
-
-    return item_cnt, cur_addr
 
 
 def _add_struc_member(sptr, field: StructField):
@@ -480,8 +450,174 @@ def _get_tinfo_from_data_type(data_type: str) -> idaapi.tinfo_t | None:
     return t
 
 
+def _find_struct_array_size(start_addr, struct_size):
+    # 首先找到 start_addr 处的双字地址，这是每个结构体的标识
+    func_addr = idaapi.get_wide_dword(start_addr)
+
+    cur_addr = start_addr + struct_size
+    item_cnt = 1
+    while True:
+        cur_func_addr = idaapi.get_wide_dword(cur_addr)
+        if cur_func_addr != func_addr:
+            break
+        item_cnt += 1
+        cur_addr += struct_size
+
+    return item_cnt, cur_addr
+
+
+def _create_struct_array(struct: Struct):
+    for i, array_start_addr in enumerate(struct.array_start_addrs):
+        # 先找出数组的结束地址和大小
+        if len(struct.array_end_addrs) > i:
+            array_end_addr = struct.array_end_addrs[i]
+            array_size = (array_end_addr - array_start_addr) // struct.size
+            if len(struct.array_sizes) > i:
+                struct.array_sizes[i] = array_size
+            else:
+                struct.array_sizes.append(array_size)
+        elif len(struct.array_sizes) > i:
+            array_size = struct.array_sizes[i]
+            array_end_addr = array_start_addr + array_size * struct.size
+            if len(struct.array_end_addrs) > i:
+                struct.array_end_addrs[i] = array_end_addr
+            else:
+                struct.array_end_addrs.append(array_end_addr)
+        else:  # 仅提供了起始地址，需自行查找 end_addr 和 array_size
+            # 大部分结构体第一个字段是指向该类结构体函数的指针，可根据这个特征来查找数组的结束地址
+            # 如果不是该特征，则无法自动查找结束地址，需要手动指定
+            array_size, array_end_addr = _find_struct_array_size(array_start_addr, struct.size)
+            struct.array_end_addrs.append(array_end_addr)
+            struct.array_sizes.append(array_size)
+
+            # 更新结构体相关函数所在地址名称
+            func_addr_name = struct.fields[0].name.removeprefix("fld_0_")
+            func_addr = idaapi.get_wide_dword(array_start_addr)
+            idaapi.set_name(func_addr, func_addr_name)
+
+        # 创建结构体数组
+        idaapi.del_items(array_start_addr, idaapi.DELIT_SIMPLE, array_size * struct.size)
+        if array_size <= 100 or array_size * struct.size < 0x1000:  # 小数组
+            idaapi.create_struct(array_start_addr, struct.size, struct.id)
+            if not idc.make_array(array_start_addr, array_size):
+                idaapi.warning(f"Failed to create array at {array_start_addr:x}.\n")
+                continue
+            ap = idaapi.array_parameters_t()
+            ap.flags = idaapi.AP_INDEX | idaapi.AP_IDXDEC | idaapi.AP_ARRAY
+            idaapi.set_array_parameters(array_start_addr, ap)
+        else:  # 大数组
+            cnt = 0
+            for addr in range(array_start_addr, array_end_addr, struct.size):
+                idaapi.create_struct(addr, struct.size, struct.id)
+                if cnt > 0:
+                    idaapi.set_cmt(addr, f"{struct.name}_ARRAY[{cnt}]", 1)
+                cnt += 1
+
+        # 结构体数组名和注释
+        array_name = f"{struct.name}_ARRAY"
+        if i > 0:
+            array_name += f"_{i}"
+        idaapi.set_name(array_start_addr, array_name)
+        array_comment = f"{array_name}，大小: {array_size}, 结构体大小: {struct.size:x} bytes"
+        idaapi.set_cmt(array_start_addr, array_comment, 1)
+
+        idaapi.msg(
+            f"Struct array {array_name} created, size: {array_size}, struct size: {struct.size}, start at {array_start_addr:x}, end at {array_end_addr:x}\n"
+        )
+
+
+def _import_struct(struct: Struct) -> bool:
+    # 先判断结构体是否已经存在，如果存在则对齐进行更新，否则创建新的结构体
+    is_update = False
+
+    sid = struct.id
+    if sid == idaapi.BADADDR:  # 若未指定 id，则根据名称查找
+        sid = idaapi.get_struc_id(struct.name)
+        struct.id = sid
+    else:  # 若指定了 id，则根据 id 查找
+        struct_name = idaapi.get_struc_name(sid)
+        if struct_name != struct.name:
+            idaapi.set_struc_name(sid, struct.name)
+            idaapi.msg(f"Renamed struct {struct_name} to {struct.name}\n")
+        sid = idaapi.get_struc_id(struct.name)
+
+    if sid == idaapi.BADADDR:  # 不存在则创建
+        sid = idaapi.add_struc(idaapi.BADADDR, struct.name)
+        idaapi.msg(f"Added struct {struct.name}\n")
+        struct.id = sid
+    else:
+        is_update = True
+        idaapi.msg(f"Updating struct {struct.name}\n")
+
+    sptr = idaapi.get_struc(sid)
+    idaapi.set_struc_cmt(sid, struct.comment, True)
+
+    # 结构体字段
+    for field in struct.fields:
+        if is_update:  # 更新结构体时，先删除原有成员
+            idaapi.del_struc_members(sptr, field.offset, field.offset + field.size)
+
+        # 添加成员
+        data_flag = _get_data_flags(field)
+        if field._pure_data_type.startswith("struct_"):  # 结构体
+            if field._is_ptr:  # 结构体指针
+                idaapi.add_struc_member(sptr, field.name, field.offset, data_flag, None, field.size)
+            else:  # 结构体或结构体数组
+                _add_struc_member(sptr, field)
+        elif field.data_type == "string":  # 字符串
+            _add_string_member(sptr, field)
+        else:  # 其他类型（基础类型，指针）
+            idaapi.add_struc_member(sptr, field.name, field.offset, data_flag, None, field.size)
+
+        mptr = idaapi.get_member(sptr, field.offset)
+        if mptr == idaapi.BADADDR:
+            idaapi.warning(f"Failed to add member '{field.name}' to struct '{struct.name}'")
+            continue
+
+        # set tinfo
+        tinfo = _get_tinfo_from_data_type(field.data_type)
+        if tinfo:
+            idaapi.set_member_tinfo(sptr, mptr, 0, tinfo, 0)
+        # set comment
+        idaapi.set_member_cmt(mptr, field.comment, 1)
+
+    struct_name = idaapi.get_struc_name(sid)
+    struct_size = idaapi.get_struc_size(sptr)
+
+    # 校验结构体大小是否一致
+    if struct.size == struct_size:
+        idaapi.msg(f"Struct {struct_name} size: {struct_size:x}\n")
+    else:
+        idaapi.warning(f"Struct {struct_name} size mismatch: {struct.size:x} vs {struct_size:x}\n")
+        return False
+
+    # IDA 视图中创建结构体数组
+    if not struct.array_updated and len(struct.array_start_addrs) > 0:
+        _create_struct_array(struct)
+        struct.array_updated = True
+
+    return True
+
+
 def import_structs():
-    pass
+    parser = StructMDFileParser()
+    structs = parser.parse(STRUCTS_FILE)
+    idaapi.msg(f"Parsed structs: {len(structs)}\n")
+
+    for i, struct in enumerate(structs):
+        idaapi.msg(f"Importing {i+1}/{len(structs)}: {struct.name_zh}({struct.name}) ...\n")
+        if struct.wip:
+            idaapi.msg(f"Skipped WIP struct: {struct.name_zh}({struct.name})\n")
+            continue
+        if _import_struct(struct):
+            idaapi.msg("Imported.\n")
+        else:
+            idaapi.msg("Failed to import.\n")
+
+    parser.write_file(STRUCTS_FILE)
+
+    idaapi.msg("All structs imported.\n")
+    idaapi.msg("-" * 80 + "\n")
 
 
 def export_structs():
