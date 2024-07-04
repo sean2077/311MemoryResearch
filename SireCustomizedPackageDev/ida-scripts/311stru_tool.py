@@ -116,7 +116,7 @@ def _cvt_int_array(s: str):
 class Struct:
     """Markdown 文件中存储结构体表格及相关信息"""
 
-    title: str
+    title: str = ""
 
     # 元信息
     name: str = field(default="", init=False)
@@ -299,7 +299,10 @@ class StructMDFileParser:
                 f.write(table.table_string())
                 f.write("\n")
                 # 写入表格以下内容
-                f.writelines(table._content)
+                if not table._content:
+                    f.write("\n\n")
+                else:
+                    f.writelines(table._content)
 
     @staticmethod
     def _reach_table_row(line: str) -> bool:
@@ -313,6 +316,7 @@ class StructMDFileParser:
 
 
 import idaapi
+import idautils
 import idc
 
 
@@ -644,8 +648,59 @@ def import_selected_structs():
     import_structs(selected)
 
 
+def _replace_common_data_type(data_type: str) -> str:
+    return data_type.replace("__int32", "int").replace("__int16", "short").replace("__int8", "byte")
+
+
+def _export_structs(sid: int, struct: Struct):
+    sptr = idaapi.get_struc(sid)
+    struct.size = idaapi.get_struc_size(sptr)
+    struct.comment = idaapi.get_struc_cmt(sid, True) or ""
+
+    # 字段
+    struct.fields.clear()
+    for offset, field_name, field_size in idautils.StructMembers(sid):
+        mptr = idaapi.get_member(sptr, offset)
+        mid = idaapi.get_member_id(sptr, offset)
+        comment = idaapi.get_member_cmt(mid, 1) or ""
+        tinfo = idaapi.tinfo_t()
+        data_type = ""
+        if idaapi.get_member_tinfo(tinfo, mptr):
+            data_type = _replace_common_data_type(tinfo.dstr())
+
+        field = StructField(offset, field_size, data_type, field_name, comment)
+        struct.fields.append(field)
+        field._modified = True
+
+
 def export_structs():
     idaapi.msg("Exporting structs ...\n")
+
+    # 先解析出已有的结构体
+    parser = StructMDFileParser()
+    structs = parser.parse(STRUCTS_FILE)
+    sid_to_index: dict[int, int] = {}
+    for i, struct in enumerate(structs):
+        sid_to_index[struct.id] = i
+
+    # 查找所有以 struct_ 开头的结构体（假设这些是我们要导出的结构体）
+    for i, sid, name in idautils.Structs():
+        if not name.startswith("struct_"):
+            continue
+        if sid in sid_to_index:
+            struct = structs[sid_to_index[sid]]
+            struct.name = name
+            _export_structs(sid, struct)
+        else:
+            tb_index = len(structs) + 1
+            struct = Struct(f"[{tb_index}]{name}")
+            struct.id = sid
+            struct.name = name
+            _export_structs(sid, struct)
+            parser.add_struct(struct)
+
+    # 写回文件
+    parser.write_file(STRUCTS_FILE)
 
     idaapi.msg("Exported.\n")
     idaapi.msg("-" * 80 + "\n")
