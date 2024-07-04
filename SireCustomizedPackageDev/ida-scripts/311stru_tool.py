@@ -362,7 +362,7 @@ def _add_struc_member(sptr, field: StructField):
 def _add_string_member(sptr, field: StructField):
     """添加字符串成员"""
     opinfo = idaapi.opinfo_t()
-    opinfo.strtype = idaapi.STRTYPE_C_32
+    opinfo.strtype = idaapi.STRTYPE_C
     idaapi.add_struc_member(sptr, field.name, field.offset, idaapi.strlit_flag(), opinfo, field.size)
 
 
@@ -404,6 +404,11 @@ def _get_tinfo_from_data_type(data_type: str) -> idaapi.tinfo_t | None:
     # 快速排查一些特例
     if pure_data_type in ("pointer", "address", "pointer32"):
         return None
+
+    if pure_data_type == "string":
+        t = idaapi.tinfo_t(idaapi.BTF_CHAR)
+        t.create_array(t)
+        return t
 
     # 先处理基础类型和结构体类型
     t = _get_tinfo_from_base_type(pure_data_type)
