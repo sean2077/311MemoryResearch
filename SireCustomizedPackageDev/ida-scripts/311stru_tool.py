@@ -62,12 +62,13 @@ class StructField:
     offset: int = field(on_setattr=_set_hook)
     size: int = field(on_setattr=_set_hook)  # 字段大小
     data_type: str = field(on_setattr=_set_hook)  # 数据类型
-    name: str = field(on_setattr=_set_hook)  # 字段名
+    name: str = field(on_setattr=_set_hook)  # 字段名(带前缀)
     comment: str = field(on_setattr=_set_hook)  # 字段注释
 
     _is_array: bool = field(default=False, init=False, repr=False)  # 是否是数组
     _is_ptr: bool = field(default=False, init=False, repr=False)  # 是否是指针
     _pure_data_type: str = field(default="", init=False, repr=False)  # 去掉 [], *, () 的 data_type
+    _pure_name: str = field(default="", init=False, repr=False)  # 去掉前缀(fld_xx_ 或 field_XX)的字段名
 
     _modified: bool = field(default=False, init=False, repr=False)  # 是否被修改
 
@@ -75,6 +76,16 @@ class StructField:
         object.__setattr__(self, "_modified", True)
 
     def __attrs_post_init__(self):
+        self._is_array = "[" in self.data_type
+        self._is_ptr = self.data_type in ("pointer", "address", "pointer32") or "*" in self.data_type
+        self._pure_data_type = get_pure_data_type(self.data_type)
+        _pure_name = self.name
+        if self.name.startswith(f"fld_{self.offset:x}_"):
+            _pure_name = self.name.removeprefix(f"fld_{self.offset:x}_")
+        elif self.name.startswith(f"field_{self.offset:X}"):  # IDA 自动生成的结构体字段名
+            _pure_name = self.name.removeprefix(f"field_{self.offset:X}")
+        self._pure_name = _pure_name
+
         self._modified = False
 
     @classmethod
@@ -84,19 +95,15 @@ class StructField:
         offset = int(offset, 16)
         size = int(size)
         data_type = data_type.strip()
-        field_name = f"fld_{offset:x}_{field_name.strip()}"
+        field_name = field_name.strip()
+        if not field_name.startswith("fld_") and not field_name.startswith("field_"):
+            field_name = f"fld_{offset:x}_{field_name}"
         field_comment = field_comment.strip()
-        ret = cls(offset, size, data_type, field_name, field_comment)
 
-        ret._is_array = "[" in ret.data_type
-        ret._is_ptr = ret.data_type in ("pointer", "address", "pointer32") or "*" in ret.data_type
-        ret._pure_data_type = get_pure_data_type(ret.data_type)
-
-        return ret
+        return cls(offset, size, data_type, field_name, field_comment)
 
     def to_table_row(self) -> list[str]:
-        name = self.name.removeprefix(f"fld_{self.offset:x}_")  # 去掉前缀
-        return [f"{self.offset:x}", str(self.size), self.data_type, name, self.comment]
+        return [f"{self.offset:x}", str(self.size), self.data_type, self._pure_name, self.comment]
 
 
 def _cvt_int16_array(s: str):
