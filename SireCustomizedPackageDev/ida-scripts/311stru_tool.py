@@ -103,7 +103,7 @@ class StructField:
         return cls(offset, size, data_type, field_name, field_comment)
 
     def to_table_row(self) -> list[str]:
-        return [f"{self.offset:x}", str(self.size), self.data_type, self._pure_name, self.comment]
+        return [f"+{self.offset:X}", str(self.size), self.data_type, self._pure_name, self.comment]
 
 
 def _cvt_int16_array(s: str):
