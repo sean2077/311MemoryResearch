@@ -542,7 +542,7 @@ def _create_struct_array(struct: Struct):
         if i > 0:
             array_name += f"_{i}"
         idaapi.set_name(array_start_addr, array_name)
-        array_comment = f"{array_name}，大小: {array_size}, 结构体大小: {struct.size:x} bytes"
+        array_comment = f"{array_name}[end={format_address(array_end_addr)},size={array_size},struct_size={struct.size:#x}]"
         idaapi.set_cmt(array_start_addr, array_comment, 1)
 
         idaapi.msg(
@@ -616,6 +616,7 @@ def _import_struct(struct: Struct) -> bool:
         return False
 
     # IDA 视图中创建结构体数组
+    # struct.array_updated = False
     if not struct.array_updated and len(struct.array_start_addrs) > 0:
         _create_struct_array(struct)
         struct.array_updated = True

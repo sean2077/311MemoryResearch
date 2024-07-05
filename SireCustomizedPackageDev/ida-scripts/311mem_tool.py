@@ -497,6 +497,28 @@ def export_records():
 
             idaapi.msg(f"Function at {func_ea:x} exported.\n")
 
+    # 找出其他带注释的 Names
+    for ea, name in idautils.Names():
+        if ea not in addr2idx:
+            cmt = idaapi.get_cmt(ea, True)
+            if not cmt:
+                continue
+            # 忽略一些特例
+            if re.match(r"a+[A-Z]", name):
+                continue
+            if any(name.startswith(prefix) for prefix in ("sub_", "loc_", "j_", "def_", "__", "unknown_")):
+                continue
+            if any(cmt.startswith(prefix) for prefix in ("Microsoft", "MFC", "?", "D3DX", "jumptable")):
+                continue
+
+            record = Record(ea, "地址")
+            record.comment = cmt
+            record.name = name
+            records.append(record)
+            addr2idx[ea] = len(records) - 1
+
+            idaapi.msg(f"Name {name} at {ea:x} exported.\n")
+
     # 按(类别，地址)排序
     sort_records(records)
 
