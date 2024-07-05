@@ -162,17 +162,18 @@ class Struct:
 
     def meta_lines(self) -> list[str]:
         lines = []
-        lines.append(f"- struct_name_zh: {self.name_zh}\n")
-        lines.append(f"- struct_name: {self.name}\n")
-        lines.append(f"- struct_id: {self.id:08x}\n")
-        lines.append(f"- struct_size: {self.size:#x}\n")
-        lines.append(f"- array_start_addrs: {','.join(map(format_address, self.array_start_addrs))}\n")
-        lines.append(f"- array_end_addrs: {','.join(map(format_address, self.array_end_addrs))}\n")
-        lines.append(f"- array_sizes: {','.join(map(str, self.array_sizes))}\n")
-        lines.append(f"- array_updated: {self.array_updated}\n")
-        lines.append(f"- last_update: {self.last_update}\n")
-        lines.append(f"- wip: {self.wip}\n")
-        return lines
+        lines.append(f"- struct_name_zh: {self.name_zh}")
+        lines.append(f"- struct_name: {self.name}")
+        lines.append(f"- struct_id: {self.id:08x}")
+        lines.append(f"- struct_size: {self.size:#x}")
+        lines.append(f"- array_start_addrs: {','.join(map(format_address, self.array_start_addrs))}")
+        lines.append(f"- array_end_addrs: {','.join(map(format_address, self.array_end_addrs))}")
+        lines.append(f"- array_sizes: {','.join(map(str, self.array_sizes))}")
+        lines.append(f"- array_updated: {self.array_updated}")
+        lines.append(f"- last_update: {self.last_update}")
+        lines.append(f"- wip: {self.wip}")
+
+        return [line.strip() + "\n" for line in lines]
 
     def table_string(self) -> str:
         tb = prettytable.PrettyTable()
